@@ -679,7 +679,16 @@ namespace AssetStudioGUI
             sortColumn = e.Column;
             assetListView.BeginUpdate();
             assetListView.SelectedIndices.Clear();
-            if (sortColumn == 4) //FullSize
+            if (sortColumn == 5) //Compressed Size Estimate
+            {
+                visibleAssets.Sort((a, b) =>
+                {
+                    var asf = a.CompressedSizeEstimate;
+                    var bsf = b.CompressedSizeEstimate;
+                    return reverseSort ? bsf.CompareTo(asf) : asf.CompareTo(bsf);
+                });
+            }
+            else if (sortColumn == 4) //FullSize
             {
                 visibleAssets.Sort((a, b) =>
                 {
@@ -1645,14 +1654,19 @@ namespace AssetStudioGUI
 
         private void assetListView_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (assetListView.SelectedIndices.Count > 1)
-                StatusStripUpdate($"Selected {assetListView.SelectedIndices.Count} assets.");
+            selectionChanged();
         }
 
         private void assetListView_VirtualItemsSelectionRangeChanged(object sender, ListViewVirtualItemsSelectionRangeChangedEventArgs e)
         {
-            if (assetListView.SelectedIndices.Count > 1)
-                StatusStripUpdate($"Selected {assetListView.SelectedIndices.Count} assets.");
+            selectionChanged();
+        }
+
+        void selectionChanged() {
+            if (assetListView.SelectedIndices.Count > 1) {
+                var compressedSize = GetSelectedAssets().Sum(x => x.Asset.compressedSizeEstimate);
+                StatusStripUpdate($"Selected {assetListView.SelectedIndices.Count} assets. Compressed size: {compressedSize} bytes");
+            }
         }
 
         private List<AssetItem> GetSelectedAssets()

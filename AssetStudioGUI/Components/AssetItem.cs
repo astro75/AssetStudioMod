@@ -11,6 +11,7 @@ namespace AssetStudioGUI
         public string TypeString;
         public long m_PathID;
         public long FullSize;
+        public long CompressedSizeEstimate;
         public ClassIDType Type;
         public string InfoText;
         public string UniqueID;
@@ -24,6 +25,7 @@ namespace AssetStudioGUI
             TypeString = Type.ToString();
             m_PathID = asset.m_PathID;
             FullSize = asset.byteSize;
+            CompressedSizeEstimate = asset.compressedSizeEstimate;
         }
 
         public void SetSubItems()
@@ -34,6 +36,7 @@ namespace AssetStudioGUI
                 TypeString, //Type
                 m_PathID.ToString(), //PathID
                 FullSize.ToString(), //Size
+                CompressedSizeEstimate.ToString(), //Compressed Size Estimate
             });
         }
     }

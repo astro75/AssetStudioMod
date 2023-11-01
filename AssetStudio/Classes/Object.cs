@@ -13,6 +13,7 @@ namespace AssetStudio
         public ClassIDType type;
         public SerializedType serializedType;
         public uint byteSize;
+        public uint compressedSizeEstimate;
 
         public Object(ObjectReader reader)
         {
@@ -26,6 +27,8 @@ namespace AssetStudio
             platform = reader.platform;
             serializedType = reader.serializedType;
             byteSize = reader.byteSize;
+            compressedSizeEstimate = ImportHelper.CompressLZ4AndGetSize(GetRawData());
+            reader.Reset();
 
             if (platform == BuildTarget.NoTarget)
             {

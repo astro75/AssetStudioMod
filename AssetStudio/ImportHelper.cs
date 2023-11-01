@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using K4os.Compression.LZ4;
 
 namespace AssetStudio
 {
@@ -72,6 +73,23 @@ namespace AssetStudio
                 reader.Dispose();
                 return null;
             }
+        }
+        
+        public static uint CompressGZipAndGetSize(byte[] data)
+        {
+            using (var memoryStream = new MemoryStream())
+            {
+                using (var gzipStream = new GZipStream(memoryStream, CompressionMode.Compress, true))
+                {
+                    gzipStream.Write(data, 0, data.Length);
+                }
+                return (uint) memoryStream.Length;
+            }
+        }
+        
+        public static uint CompressLZ4AndGetSize(byte[] data)
+        {
+            return (uint) LZ4Pickler.Pickle(data, LZ4Level.L05_HC).LongLength;
         }
 
         public static FileReader DecompressBrotli(FileReader reader)

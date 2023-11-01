@@ -17,4 +17,8 @@
     <PackageReference Include="K4os.Compression.LZ4" Version="1.1.11" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="lz4net" Version="1.0.15.93" />
+  </ItemGroup>
+
 </Project>
