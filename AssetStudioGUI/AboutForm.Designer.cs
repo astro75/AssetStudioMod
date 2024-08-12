@@ -164,7 +164,7 @@
             this.tableLayoutPanel2.ColumnCount = 3;
             this.tableLayoutPanel2.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 41.37931F));
             this.tableLayoutPanel2.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 58.62069F));
-            this.tableLayoutPanel2.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 111F));
+            this.tableLayoutPanel2.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 112F));
             this.tableLayoutPanel2.Controls.Add(this.label16, 0, 0);
             this.tableLayoutPanel2.Controls.Add(this.label17, 1, 0);
             this.tableLayoutPanel2.Controls.Add(this.gitPerfareLinkLabel, 2, 0);
@@ -194,7 +194,7 @@
             // 
             this.label17.AutoSize = true;
             this.label17.BackColor = System.Drawing.Color.Transparent;
-            this.label17.Location = new System.Drawing.Point(102, 2);
+            this.label17.Location = new System.Drawing.Point(101, 2);
             this.label17.Name = "label17";
             this.label17.Size = new System.Drawing.Size(110, 13);
             this.label17.TabIndex = 10;
@@ -204,7 +204,7 @@
             // 
             this.gitPerfareLinkLabel.AutoSize = true;
             this.gitPerfareLinkLabel.BackColor = System.Drawing.Color.Transparent;
-            this.gitPerfareLinkLabel.Location = new System.Drawing.Point(239, 2);
+            this.gitPerfareLinkLabel.Location = new System.Drawing.Point(238, 2);
             this.gitPerfareLinkLabel.Name = "gitPerfareLinkLabel";
             this.gitPerfareLinkLabel.Size = new System.Drawing.Size(67, 13);
             this.gitPerfareLinkLabel.TabIndex = 11;
@@ -226,17 +226,17 @@
             // 
             this.label19.AutoSize = true;
             this.label19.BackColor = System.Drawing.Color.Transparent;
-            this.label19.Location = new System.Drawing.Point(102, 20);
+            this.label19.Location = new System.Drawing.Point(101, 20);
             this.label19.Name = "label19";
             this.label19.Size = new System.Drawing.Size(113, 13);
             this.label19.TabIndex = 13;
-            this.label19.Text = "aelurum (c) 2021-2023";
+            this.label19.Text = "aelurum (c) 2021-2024";
             // 
             // gitAelurumLinkLabel
             // 
             this.gitAelurumLinkLabel.AutoSize = true;
             this.gitAelurumLinkLabel.BackColor = System.Drawing.Color.Transparent;
-            this.gitAelurumLinkLabel.Location = new System.Drawing.Point(239, 20);
+            this.gitAelurumLinkLabel.Location = new System.Drawing.Point(238, 20);
             this.gitAelurumLinkLabel.Name = "gitAelurumLinkLabel";
             this.gitAelurumLinkLabel.Size = new System.Drawing.Size(67, 13);
             this.gitAelurumLinkLabel.TabIndex = 14;
@@ -250,7 +250,7 @@
             this.tableLayoutPanel1.ColumnCount = 3;
             this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 41.37931F));
             this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 58.62069F));
-            this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 111F));
+            this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 112F));
             this.tableLayoutPanel1.Controls.Add(this.label5, 0, 0);
             this.tableLayoutPanel1.Controls.Add(this.productNamelabel, 1, 0);
             this.tableLayoutPanel1.Controls.Add(this.label7, 0, 1);
@@ -285,7 +285,7 @@
             // 
             this.productNamelabel.AutoSize = true;
             this.productNamelabel.BackColor = System.Drawing.Color.Transparent;
-            this.productNamelabel.Location = new System.Drawing.Point(102, 2);
+            this.productNamelabel.Location = new System.Drawing.Point(101, 2);
             this.productNamelabel.Name = "productNamelabel";
             this.productNamelabel.Size = new System.Drawing.Size(103, 13);
             this.productNamelabel.TabIndex = 1;
@@ -306,11 +306,11 @@
             this.modVersionLabel.AutoSize = true;
             this.modVersionLabel.BackColor = System.Drawing.Color.Transparent;
             this.modVersionLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.modVersionLabel.Location = new System.Drawing.Point(102, 20);
+            this.modVersionLabel.Location = new System.Drawing.Point(101, 20);
             this.modVersionLabel.Name = "modVersionLabel";
-            this.modVersionLabel.Size = new System.Drawing.Size(52, 13);
+            this.modVersionLabel.Size = new System.Drawing.Size(46, 13);
             this.modVersionLabel.TabIndex = 3;
-            this.modVersionLabel.Text = "0.16.48.1";
+            this.modVersionLabel.Text = "0.18.0.0";
             // 
             // label4
             // 
@@ -327,7 +327,7 @@
             // 
             this.label8.AutoSize = true;
             this.label8.BackColor = System.Drawing.Color.Transparent;
-            this.label8.Location = new System.Drawing.Point(102, 38);
+            this.label8.Location = new System.Drawing.Point(101, 38);
             this.label8.Name = "label8";
             this.label8.Size = new System.Drawing.Size(108, 13);
             this.label8.TabIndex = 5;
@@ -337,7 +337,7 @@
             // 
             this.checkUpdatesLinkLabel.AutoSize = true;
             this.checkUpdatesLinkLabel.BackColor = System.Drawing.Color.Transparent;
-            this.checkUpdatesLinkLabel.Location = new System.Drawing.Point(239, 20);
+            this.checkUpdatesLinkLabel.Location = new System.Drawing.Point(238, 20);
             this.checkUpdatesLinkLabel.Name = "checkUpdatesLinkLabel";
             this.checkUpdatesLinkLabel.Size = new System.Drawing.Size(96, 13);
             this.checkUpdatesLinkLabel.TabIndex = 6;
@@ -414,7 +414,7 @@
             this.productVersionLabel.Padding = new System.Windows.Forms.Padding(0, 0, 5, 0);
             this.productVersionLabel.Size = new System.Drawing.Size(384, 13);
             this.productVersionLabel.TabIndex = 2;
-            this.productVersionLabel.Text = "v0.16.48.1 [x64]";
+            this.productVersionLabel.Text = "v0.18.0.0 [x64]";
             this.productVersionLabel.TextAlign = System.Drawing.ContentAlignment.BottomCenter;
             // 
             // panel2

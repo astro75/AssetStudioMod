@@ -23,7 +23,7 @@ namespace AssetStudio
             m_Components = new PPtr<Component>[m_Component_size];
             for (int i = 0; i < m_Component_size; i++)
             {
-                if ((version[0] == 5 && version[1] < 5) || version[0] < 5) //5.5 down
+                if (version < (5, 5)) //5.5 down
                 {
                     int first = reader.ReadInt32();
                 }

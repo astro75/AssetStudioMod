@@ -33,7 +33,7 @@ namespace AssetStudio
 
         public AudioClip(ObjectReader reader) : base(reader)
         {
-            if (version[0] < 5)
+            if (version < 5)
             {
                 m_Format = reader.ReadInt32();
                 m_Type = (FMODSoundType)reader.ReadInt32();
@@ -41,7 +41,7 @@ namespace AssetStudio
                 m_UseHardware = reader.ReadBoolean();
                 reader.AlignStream();
 
-                if (version[0] >= 4 || (version[0] == 3 && version[1] >= 2)) //3.2.0 to 5
+                if (version >= (3, 2)) //3.2.0 to 5
                 {
                     int m_Stream = reader.ReadInt32();
                     m_Size = reader.ReadInt32();
@@ -95,7 +95,7 @@ namespace AssetStudio
     public enum FMODSoundType
     {
         UNKNOWN = 0,
-        ACC = 1,
+        AAC = 1,
         AIFF = 2,
         ASF = 3,
         AT3 = 4,

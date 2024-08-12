@@ -2,13 +2,13 @@
 
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
-        <TargetFrameworks>net472;net6.0-windows;net7.0-windows</TargetFrameworks>
+        <TargetFrameworks>net472;net6.0-windows;net7.0-windows;net8.0-windows</TargetFrameworks>
         <UseWindowsForms>true</UseWindowsForms>
         <ApplicationIcon>Resources\as.ico</ApplicationIcon>
         <AssemblyTitle>AssetStudioMod by aelurum</AssemblyTitle>
         <AssemblyName>AssetStudioModGUI</AssemblyName>
-        <Version>0.17.3.0</Version>
-        <Copyright>Copyright © Perfare 2018-2022; Copyright © aelurum 2021-2023</Copyright>
+        <Version>0.18.0.0</Version>
+        <Copyright>Copyright © Perfare 2018-2022; Copyright © aelurum 2021-2024</Copyright>
         <DebugType>embedded</DebugType>
     </PropertyGroup>
 
@@ -54,14 +54,14 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft-WindowsAPICodePack-Core-6.0" Version="1.1.6-preview.2.24bd88f" />
-        <PackageReference Include="Microsoft-WindowsAPICodePack-Shell-6.0" Version="1.1.6-preview.2.24bd88f" />
+        <PackageReference Include="Microsoft-WindowsAPICodePack-Core-6.0" Version="1.1.6" />
+        <PackageReference Include="Microsoft-WindowsAPICodePack-Shell-6.0" Version="1.1.6" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     </ItemGroup>
 
     <ItemGroup Condition=" '$(TargetFramework)' != 'net472' ">
-        <PackageReference Include="OpenTK.Graphics" Version="4.8.0" />
-        <PackageReference Include="OpenTK.Windowing.Desktop" Version="4.8.0" />
+        <PackageReference Include="OpenTK.Graphics" Version="4.8.2" />
+        <PackageReference Include="OpenTK.Windowing.Desktop" Version="4.8.2" />
         <Reference Include="OpenTK.WinForms">
             <HintPath>Libraries\OpenTK.WinForms.dll</HintPath>
         </Reference>

@@ -20,7 +20,7 @@ namespace AssetStudio
             var readed = reader.Position - reader.byteStart;
             if (readed != reader.byteSize)
             {
-                Logger.Info($"Error while read type, read {readed} bytes but expected {reader.byteSize} bytes");
+                Logger.Info($"Failed to read type, read {readed} bytes but expected {reader.byteSize} bytes");
             }
             return sb.ToString();
         }
@@ -116,7 +116,7 @@ namespace AssetStudio
                     {
                         append = false;
                         var size = reader.ReadInt32();
-                        reader.ReadBytes(size);
+                        reader.BaseStream.Position += size;
                         i += 2;
                         sb.AppendFormat("{0}{1} {2}\r\n", (new string('\t', level)), varTypeStr, varNameStr);
                         sb.AppendFormat("{0}{1} {2} = {3}\r\n", (new string('\t', level)), "int", "size", size);
@@ -171,13 +171,13 @@ namespace AssetStudio
             for (int i = 1; i < m_Nodes.Count; i++)
             {
                 var m_Node = m_Nodes[i];
-                var varNameStr = m_Node.m_Name;
+                var varNameStr = m_Node.m_Name.Replace("image data", "image_data");
                 obj[varNameStr] = ReadValue(m_Nodes, reader, ref i);
             }
             var readed = reader.Position - reader.byteStart;
             if (readed != reader.byteSize)
             {
-                Logger.Info($"Error while read type, read {readed} bytes but expected {reader.byteSize} bytes");
+                Logger.Info($"Failed to read type, read {readed} bytes but expected {reader.byteSize} bytes");
             }
             return obj;
         }
@@ -262,7 +262,13 @@ namespace AssetStudio
                 case "TypelessData":
                     {
                         var size = reader.ReadInt32();
-                        value = reader.ReadBytes(size);
+                        var dic = new OrderedDictionary
+                        {
+                            { "Offset", reader.BaseStream.Position },
+                            { "Size", size }
+                        };
+                        value = dic;
+                        reader.BaseStream.Position += size;
                         i += 2;
                         break;
                     }
@@ -275,13 +281,13 @@ namespace AssetStudio
                             var vector = GetNodes(m_Nodes, i);
                             i += vector.Count - 1;
                             var size = reader.ReadInt32();
-                            var list = new List<object>(size);
+                            var array = new object[size];
                             for (int j = 0; j < size; j++)
                             {
                                 int tmp = 3;
-                                list.Add(ReadValue(vector, reader, ref tmp));
+                                array[j] = ReadValue(vector, reader, ref tmp);
                             }
-                            value = list;
+                            value = array;
                             break;
                         }
                         else //Class

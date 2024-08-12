@@ -25,7 +25,7 @@ namespace AssetStudio
 
         protected Renderer(ObjectReader reader) : base(reader)
         {
-            if (version[0] < 5) //5.0 down
+            if (version < 5) //5.0 down
             {
                 var m_Enabled = reader.ReadBoolean();
                 var m_CastShadows = reader.ReadBoolean();
@@ -34,27 +34,27 @@ namespace AssetStudio
             }
             else //5.0 and up
             {
-                if (version[0] > 5 || (version[0] == 5 && version[1] >= 4)) //5.4 and up
+                if (version >= (5, 4)) //5.4 and up
                 {
                     var m_Enabled = reader.ReadBoolean();
                     var m_CastShadows = reader.ReadByte();
                     var m_ReceiveShadows = reader.ReadByte();
-                    if (version[0] > 2017 || (version[0] == 2017 && version[1] >= 2)) //2017.2 and up
+                    if (version >= (2017, 2)) //2017.2 and up
                     {
                         var m_DynamicOccludee = reader.ReadByte();
                     }
-                    if (version[0] >= 2021) //2021.1 and up
+                    if (version >= 2021) //2021.1 and up
                     {
                         var m_StaticShadowCaster = reader.ReadByte();
                     }
                     var m_MotionVectors = reader.ReadByte();
                     var m_LightProbeUsage = reader.ReadByte();
                     var m_ReflectionProbeUsage = reader.ReadByte();
-                    if (version[0] > 2019 || (version[0] == 2019 && version[1] >= 3)) //2019.3 and up
+                    if (version >= (2019, 3)) //2019.3 and up
                     {
                         var m_RayTracingMode = reader.ReadByte();
                     }
-                    if (version[0] >= 2020) //2020.1 and up
+                    if (version >= 2020) //2020.1 and up
                     {
                         var m_RayTraceProcedural = reader.ReadByte();
                     }
@@ -69,12 +69,12 @@ namespace AssetStudio
                     reader.AlignStream();
                 }
 
-                if (version[0] >= 2018) //2018 and up
+                if (version >= 2018) //2018 and up
                 {
                     var m_RenderingLayerMask = reader.ReadUInt32();
                 }
 
-                if (version[0] > 2018 || (version[0] == 2018 && version[1] >= 3)) //2018.3 and up
+                if (version >= (2018, 3)) //2018.3 and up
                 {
                     var m_RendererPriority = reader.ReadInt32();
                 }
@@ -83,12 +83,12 @@ namespace AssetStudio
                 var m_LightmapIndexDynamic = reader.ReadUInt16();
             }
 
-            if (version[0] >= 3) //3.0 and up
+            if (version >= 3) //3.0 and up
             {
                 var m_LightmapTilingOffset = reader.ReadVector4();
             }
 
-            if (version[0] >= 5) //5.0 and up
+            if (version >= 5) //5.0 and up
             {
                 var m_LightmapTilingOffsetDynamic = reader.ReadVector4();
             }
@@ -100,13 +100,13 @@ namespace AssetStudio
                 m_Materials[i] = new PPtr<Material>(reader);
             }
 
-            if (version[0] < 3) //3.0 down
+            if (version < 3) //3.0 down
             {
                 var m_LightmapTilingOffset = reader.ReadVector4();
             }
             else //3.0 and up
             {
-                if (version[0] > 5 || (version[0] == 5 && version[1] >= 5)) //5.5 and up
+                if (version >= (5, 5)) //5.5 and up
                 {
                     m_StaticBatchInfo = new StaticBatchInfo(reader);
                 }
@@ -118,17 +118,17 @@ namespace AssetStudio
                 var m_StaticBatchRoot = new PPtr<Transform>(reader);
             }
 
-            if (version[0] > 5 || (version[0] == 5 && version[1] >= 4)) //5.4 and up
+            if (version >= (5, 4)) //5.4 and up
             {
                 var m_ProbeAnchor = new PPtr<Transform>(reader);
                 var m_LightProbeVolumeOverride = new PPtr<GameObject>(reader);
             }
-            else if (version[0] > 3 || (version[0] == 3 && version[1] >= 5)) //3.5 - 5.3
+            else if (version >= (3, 5)) //3.5 - 5.3
             {
                 var m_UseLightProbes = reader.ReadBoolean();
                 reader.AlignStream();
 
-                if (version[0] >= 5)//5.0 and up
+                if (version >= 5)//5.0 and up
                 {
                     var m_ReflectionProbeUsage = reader.ReadInt32();
                 }
@@ -136,9 +136,9 @@ namespace AssetStudio
                 var m_LightProbeAnchor = new PPtr<Transform>(reader); //5.0 and up m_ProbeAnchor
             }
 
-            if (version[0] > 4 || (version[0] == 4 && version[1] >= 3)) //4.3 and up
+            if (version >= (4, 3)) //4.3 and up
             {
-                if (version[0] == 4 && version[1] == 3) //4.3
+                if (version == (4, 3)) //4.3
                 {
                     var m_SortingLayer = reader.ReadInt16();
                 }

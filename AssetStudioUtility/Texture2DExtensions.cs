@@ -10,23 +10,33 @@ namespace AssetStudio
         public static Image<Bgra32> ConvertToImage(this Texture2D m_Texture2D, bool flip)
         {
             var converter = new Texture2DConverter(m_Texture2D);
-            var buff = BigArrayPool<byte>.Shared.Rent(m_Texture2D.m_Width * m_Texture2D.m_Height * 4);
+            var uncroppedSize = converter.GetUncroppedSize();
+            var buff = BigArrayPool<byte>.Shared.Rent(converter.OutputDataSize);
             try
             {
-                if (converter.DecodeTexture2D(buff))
+                if (!converter.DecodeTexture2D(buff)) 
+                    return null;
+
+                Image<Bgra32> image;
+                if (converter.UsesSwitchSwizzle)
                 {
-                    var image = Image.LoadPixelData<Bgra32>(buff, m_Texture2D.m_Width, m_Texture2D.m_Height);
-                    if (flip)
-                    {
-                        image.Mutate(x => x.Flip(FlipMode.Vertical));
-                    }
-                    return image;
+                    image = Image.LoadPixelData<Bgra32>(buff, uncroppedSize.Width, uncroppedSize.Height);
+                    image.Mutate(x => x.Crop(m_Texture2D.m_Width, m_Texture2D.m_Height));
                 }
-                return null;
+                else
+                {
+                    image = Image.LoadPixelData<Bgra32>(buff, m_Texture2D.m_Width, m_Texture2D.m_Height);
+                }
+
+                if (flip)
+                {
+                    image.Mutate(x => x.Flip(FlipMode.Vertical));
+                }
+                return image;
             }
             finally
             {
-                BigArrayPool<byte>.Shared.Return(buff);
+                BigArrayPool<byte>.Shared.Return(buff, clearArray: true);
             }
         }
 

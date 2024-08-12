@@ -1,301 +1,405 @@
 ﻿////
-// Based on UnityLive2DExtractorMod by aelurum
-// https://github.com/aelurum/UnityLive2DExtractor
-//
-// Original version - by Perfare
+// Based on UnityLive2DExtractor by Perfare
 // https://github.com/Perfare/UnityLive2DExtractor
 ////
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 using AssetStudio;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using static CubismLive2DExtractor.CubismParsers;
 
 namespace CubismLive2DExtractor
 {
-    public static class Live2DExtractor
+    public sealed class Live2DExtractor
     {
-        public static void ExtractLive2D(IGrouping<string, AssetStudio.Object> assets, string destPath, string modelName, AssemblyLoader assemblyLoader)
-        {            
-            var destTexturePath = Path.Combine(destPath, "textures") + Path.DirectorySeparatorChar;
-            var destMotionPath = Path.Combine(destPath, "motions") + Path.DirectorySeparatorChar;
-            var destExpressionPath = Path.Combine(destPath, "expressions") + Path.DirectorySeparatorChar;
-            Directory.CreateDirectory(destPath);
-            Directory.CreateDirectory(destTexturePath);
+        private List<MonoBehaviour> Expressions { get; set; }
+        private List<MonoBehaviour> FadeMotions { get; set; }
+        private List<GameObject> GameObjects { get; set; }
+        private List<AnimationClip> AnimationClips { get; set; }
+        private List<Texture2D> Texture2Ds { get; set; }
+        private HashSet<string> EyeBlinkParameters { get; set; }
+        private HashSet<string> LipSyncParameters { get; set; }
+        private HashSet<string> ParameterNames { get; set; }
+        private HashSet<string> PartNames { get; set; }
+        private MonoBehaviour MocMono { get; set; }
+        private MonoBehaviour PhysicsMono { get; set; }
+        private MonoBehaviour FadeMotionLst { get; set; }
+        private List<MonoBehaviour> ParametersCdi { get; set; }
+        private List<MonoBehaviour> PartsCdi { get; set; }
 
-            var monoBehaviours = new List<MonoBehaviour>();
-            var texture2Ds = new List<Texture2D>();
-            var gameObjects = new List<GameObject>();
-            var animationClips = new List<AnimationClip>();
+        public Live2DExtractor(IGrouping<string, AssetStudio.Object> assets, List<AnimationClip> inClipMotions = null, List<MonoBehaviour> inFadeMotions = null, MonoBehaviour inFadeMotionLst = null)
+        {
+            Expressions = new List<MonoBehaviour>();
+            FadeMotions = inFadeMotions ?? new List<MonoBehaviour>();
+            AnimationClips = inClipMotions ?? new List<AnimationClip>();
+            GameObjects = new List<GameObject>();
+            Texture2Ds = new List<Texture2D>();
+            EyeBlinkParameters = new HashSet<string>();
+            LipSyncParameters = new HashSet<string>();
+            ParameterNames = new HashSet<string>();
+            PartNames = new HashSet<string>();
+            FadeMotionLst = inFadeMotionLst;
+            ParametersCdi = new List<MonoBehaviour>();
+            PartsCdi = new List<MonoBehaviour>();
 
+            Logger.Debug("Sorting model assets..");
             foreach (var asset in assets)
             {
                 switch (asset)
                 {
                     case MonoBehaviour m_MonoBehaviour:
-                        monoBehaviours.Add(m_MonoBehaviour);
-                        break;
-                    case Texture2D m_Texture2D:
-                        texture2Ds.Add(m_Texture2D);
-                        break;
-                    case GameObject m_GameObject:
-                        gameObjects.Add(m_GameObject);
+                        if (m_MonoBehaviour.m_Script.TryGet(out var m_Script))
+                        {
+                            switch (m_Script.m_ClassName)
+                            {
+                                case "CubismMoc":
+                                    MocMono = m_MonoBehaviour;
+                                    break;
+                                case "CubismPhysicsController":
+                                    PhysicsMono = m_MonoBehaviour;
+                                    break;
+                                case "CubismExpressionData":
+                                    Expressions.Add(m_MonoBehaviour);
+                                    break;
+                                case "CubismFadeMotionData":
+                                    if (inFadeMotions == null && inFadeMotionLst == null)
+                                    {
+                                        FadeMotions.Add(m_MonoBehaviour);
+                                    }
+                                    break;
+                                case "CubismFadeMotionList":
+                                    if (inFadeMotions == null && inFadeMotionLst == null)
+                                    {
+                                        FadeMotionLst = m_MonoBehaviour;
+                                    }
+                                    break;
+                                case "CubismEyeBlinkParameter":
+                                    if (m_MonoBehaviour.m_GameObject.TryGet(out var blinkGameObject))
+                                    {
+                                        EyeBlinkParameters.Add(blinkGameObject.m_Name);
+                                    }
+                                    break;
+                                case "CubismMouthParameter":
+                                    if (m_MonoBehaviour.m_GameObject.TryGet(out var mouthGameObject))
+                                    {
+                                        LipSyncParameters.Add(mouthGameObject.m_Name);
+                                    }
+                                    break;
+                                case "CubismParameter":
+                                    if (m_MonoBehaviour.m_GameObject.TryGet(out var paramGameObject))
+                                    {
+                                        ParameterNames.Add(paramGameObject.m_Name);
+                                    }
+                                    break;
+                                case "CubismPart":
+                                    if (m_MonoBehaviour.m_GameObject.TryGet(out var partGameObject))
+                                    {
+                                        PartNames.Add(partGameObject.m_Name);
+                                    }
+                                    break;
+                                case "CubismDisplayInfoParameterName":
+                                    if (m_MonoBehaviour.m_GameObject.TryGet(out _))
+                                    {
+                                        ParametersCdi.Add(m_MonoBehaviour);
+                                    }
+                                    break;
+                                case "CubismDisplayInfoPartName":
+                                    if (m_MonoBehaviour.m_GameObject.TryGet(out _))
+                                    {
+                                        PartsCdi.Add(m_MonoBehaviour);
+                                    }
+                                    break;
+                            }
+                        }
                         break;
                     case AnimationClip m_AnimationClip:
-                        animationClips.Add(m_AnimationClip);
+                        if (inClipMotions == null)
+                        {
+                            AnimationClips.Add(m_AnimationClip);
+                        }
+                        break;
+                    case GameObject m_GameObject:
+                        GameObjects.Add(m_GameObject);
+                        break;
+                    case Texture2D m_Texture2D:
+                        Texture2Ds.Add(m_Texture2D);
                         break;
                 }
             }
+        }
 
-            //physics
-            var physics = monoBehaviours.FirstOrDefault(x =>
+        public void ExtractCubismModel(string destPath, string modelName, Live2DMotionMode motionMode, AssemblyLoader assemblyLoader, bool forceBezier = false, int parallelTaskCount = 1)
+        {
+            Directory.CreateDirectory(destPath);
+
+            #region moc3
+            using (var cubismModel = new CubismModel(MocMono))
             {
-                if (x.m_Script.TryGet(out var m_Script))
+                var sb = new StringBuilder();
+                sb.AppendLine("Model Stats:");
+                sb.AppendLine($"SDK Version: {cubismModel.VersionDescription}");
+                if (cubismModel.Version > 0)
                 {
-                    return m_Script.m_ClassName == "CubismPhysicsController";
+                    sb.AppendLine($"Canvas Width: {cubismModel.CanvasWidth}");
+                    sb.AppendLine($"Canvas Height: {cubismModel.CanvasHeight}");
+                    sb.AppendLine($"Center X: {cubismModel.CentralPosX}");
+                    sb.AppendLine($"Center Y: {cubismModel.CentralPosY}");
+                    sb.AppendLine($"Pixel Per Unit: {cubismModel.PixelPerUnit}");
+                    sb.AppendLine($"Part Count: {cubismModel.PartCount}");
+                    sb.AppendLine($"Parameter Count: {cubismModel.ParamCount}");
+                    Logger.Debug(sb.ToString());
+
+                    ParameterNames = cubismModel.ParamNames;
+                    PartNames = cubismModel.PartNames;
                 }
-                return false;
-            });
-            if (physics != null)
+                cubismModel.SaveMoc3($"{destPath}{modelName}.moc3");
+            }
+            #endregion
+
+            #region textures
+            var textures = new SortedSet<string>();
+            var destTexturePath = Path.Combine(destPath, "textures") + Path.DirectorySeparatorChar;
+
+            if (Texture2Ds.Count == 0)
             {
-                try
-                {
-                    var buff = ParsePhysics(physics, assemblyLoader);
-                    File.WriteAllText($"{destPath}{modelName}.physics3.json", buff);
-                }
-                catch (Exception e)
-                {
-                    Logger.Warning($"Error in parsing physics data: {e.Message}");
-                    physics = null;
-                }
+                Logger.Warning($"No textures found for \"{modelName}\" model");
+            }
+            else
+            {
+                Directory.CreateDirectory(destTexturePath);
             }
 
-            //moc
-            var moc = monoBehaviours.First(x =>
+            var textureBag = new ConcurrentBag<string>();
+            var savePathHash = new ConcurrentDictionary<string, bool>();
+            Parallel.ForEach(Texture2Ds, new ParallelOptions { MaxDegreeOfParallelism = parallelTaskCount }, texture2D =>
             {
-                if (x.m_Script.TryGet(out var m_Script))
-                {
-                    return m_Script.m_ClassName == "CubismMoc";
-                }
-                return false;
-            });
-            File.WriteAllBytes($"{destPath}{modelName}.moc3", ParseMoc(moc));
+                var savePath = $"{destTexturePath}{texture2D.m_Name}.png";
+                if (!savePathHash.TryAdd(savePath, true))
+                    return;
 
-            //texture
-            var textures = new SortedSet<string>();
-            foreach (var texture2D in texture2Ds)
-            {
                 using (var image = texture2D.ConvertToImage(flip: true))
                 {
-                    textures.Add($"textures/{texture2D.m_Name}.png");
-                    using (var file = File.OpenWrite($"{destTexturePath}{texture2D.m_Name}.png"))
+                    using (var file = File.OpenWrite(savePath))
                     {
                         image.WriteToStream(file, ImageFormat.Png);
                     }
+                    textureBag.Add($"textures/{texture2D.m_Name}.png");
                 }
-            }
+            });
+            textures.UnionWith(textureBag);
+            #endregion
 
-            //motion
-            var motions = new SortedDictionary<string, JArray>();
-
-            if (gameObjects.Count > 0)
+            #region physics3.json
+            if (PhysicsMono != null)
             {
-                var rootTransform = gameObjects[0].m_Transform;
-                while (rootTransform.m_Father.TryGet(out var m_Father))
+                var physicsDict = ParseMonoBehaviour(PhysicsMono, CubismMonoBehaviourType.Physics, assemblyLoader);
+                if (physicsDict != null)
                 {
-                    rootTransform = m_Father;
-                }
-                rootTransform.m_GameObject.TryGet(out var rootGameObject);
-                var converter = new CubismMotion3Converter(rootGameObject, animationClips.ToArray());
-                if (converter.AnimationList.Count > 0)
-                {
-                    Directory.CreateDirectory(destMotionPath);
-                }
-                foreach (ImportedKeyframedAnimation animation in converter.AnimationList)
-                {
-                    var json = new CubismMotion3Json
+                    try
                     {
-                        Version = 3,
-                        Meta = new CubismMotion3Json.SerializableMeta
-                        {
-                            Duration = animation.Duration,
-                            Fps = animation.SampleRate,
-                            Loop = true,
-                            AreBeziersRestricted = true,
-                            CurveCount = animation.TrackList.Count,
-                            UserDataCount = animation.Events.Count
-                        },
-                        Curves = new CubismMotion3Json.SerializableCurve[animation.TrackList.Count]
-                    };
-                    int totalSegmentCount = 1;
-                    int totalPointCount = 1;
-                    for (int i = 0; i < animation.TrackList.Count; i++)
-                    {
-                        var track = animation.TrackList[i];
-                        json.Curves[i] = new CubismMotion3Json.SerializableCurve
-                        {
-                            Target = track.Target,
-                            Id = track.Name,
-                            Segments = new List<float> { 0f, track.Curve[0].value }
-                        };
-                        for (var j = 1; j < track.Curve.Count; j++)
-                        {
-                            var curve = track.Curve[j];
-                            var preCurve = track.Curve[j - 1];
-                            if (Math.Abs(curve.time - preCurve.time - 0.01f) < 0.0001f) //InverseSteppedSegment
-                            {
-                                var nextCurve = track.Curve[j + 1];
-                                if (nextCurve.value == curve.value)
-                                {
-                                    json.Curves[i].Segments.Add(3f);
-                                    json.Curves[i].Segments.Add(nextCurve.time);
-                                    json.Curves[i].Segments.Add(nextCurve.value);
-                                    j += 1;
-                                    totalPointCount += 1;
-                                    totalSegmentCount++;
-                                    continue;
-                                }
-                            }
-                            if (float.IsPositiveInfinity(curve.inSlope)) //SteppedSegment
-                            {
-                                json.Curves[i].Segments.Add(2f);
-                                json.Curves[i].Segments.Add(curve.time);
-                                json.Curves[i].Segments.Add(curve.value);
-                                totalPointCount += 1;
-                            }
-                            else if (preCurve.outSlope == 0f && Math.Abs(curve.inSlope) < 0.0001f) //LinearSegment
-                            {
-                                json.Curves[i].Segments.Add(0f);
-                                json.Curves[i].Segments.Add(curve.time);
-                                json.Curves[i].Segments.Add(curve.value);
-                                totalPointCount += 1;
-                            }
-                            else //BezierSegment
-                            {
-                                var tangentLength = (curve.time - preCurve.time) / 3f;
-                                json.Curves[i].Segments.Add(1f);
-                                json.Curves[i].Segments.Add(preCurve.time + tangentLength);
-                                json.Curves[i].Segments.Add(preCurve.outSlope * tangentLength + preCurve.value);
-                                json.Curves[i].Segments.Add(curve.time - tangentLength);
-                                json.Curves[i].Segments.Add(curve.value - curve.inSlope * tangentLength);
-                                json.Curves[i].Segments.Add(curve.time);
-                                json.Curves[i].Segments.Add(curve.value);
-                                totalPointCount += 3;
-                            }
-                            totalSegmentCount++;
-                        }
+                        var buff = ParsePhysics(physicsDict);
+                        File.WriteAllText($"{destPath}{modelName}.physics3.json", buff);
                     }
-                    json.Meta.TotalSegmentCount = totalSegmentCount;
-                    json.Meta.TotalPointCount = totalPointCount;
-
-                    json.UserData = new CubismMotion3Json.SerializableUserData[animation.Events.Count];
-                    var totalUserDataSize = 0;
-                    for (var i = 0; i < animation.Events.Count; i++)
+                    catch (Exception e)
                     {
-                        var @event = animation.Events[i];
-                        json.UserData[i] = new CubismMotion3Json.SerializableUserData
-                        {
-                            Time = @event.time,
-                            Value = @event.value
-                        };
-                        totalUserDataSize += @event.value.Length;
+                        Logger.Warning($"Error in parsing physics data: {e.Message}");
+                        PhysicsMono = null;
                     }
-                    json.Meta.TotalUserDataSize = totalUserDataSize;
-
-                    var motionPath = new JObject(new JProperty("File", $"motions/{animation.Name}.motion3.json"));
-                    motions.Add(animation.Name, new JArray(motionPath));
-                    File.WriteAllText($"{destMotionPath}{animation.Name}.motion3.json", JsonConvert.SerializeObject(json, Formatting.Indented, new MyJsonConverter()));
+                }
+                else
+                {
+                    PhysicsMono = null;
                 }
             }
+            #endregion
 
-            //expression
+            #region cdi3.json
+            var isCdiParsed = false;
+            if (ParametersCdi.Count > 0 || PartsCdi.Count > 0)
+            {
+                var cdiJson = new CubismCdi3Json
+                {
+                    Version = 3,
+                    ParameterGroups = Array.Empty<CubismCdi3Json.ParamGroupArray>()
+                };
+
+                var parameters = new SortedSet<CubismCdi3Json.ParamGroupArray>();
+                foreach (var paramMono in ParametersCdi)
+                {
+                    var displayName = GetDisplayName(paramMono, assemblyLoader);
+                    if (displayName == null)
+                        break;
+
+                    paramMono.m_GameObject.TryGet(out var paramGameObject);
+                    var paramId = paramGameObject.m_Name;
+                    parameters.Add(new CubismCdi3Json.ParamGroupArray
+                    {
+                        Id = paramId,
+                        GroupId = "",
+                        Name = displayName
+                    });
+                }
+                cdiJson.Parameters = parameters.ToArray();
+
+                var parts = new SortedSet<CubismCdi3Json.PartArray>();
+                foreach (var partMono in PartsCdi)
+                {
+                    var displayName = GetDisplayName(partMono, assemblyLoader);
+                    if (displayName == null)
+                        break;
+
+                    partMono.m_GameObject.TryGet(out var partGameObject);
+                    var paramId = partGameObject.m_Name;
+                    parts.Add(new CubismCdi3Json.PartArray
+                    {
+                        Id = paramId,
+                        Name = displayName
+                    });
+                }
+                cdiJson.Parts = parts.ToArray();
+
+                if (parts.Count > 0 || parameters.Count > 0)
+                {
+                    File.WriteAllText($"{destPath}{modelName}.cdi3.json", JsonConvert.SerializeObject(cdiJson, Formatting.Indented));
+                    isCdiParsed = true;
+                }
+            }
+            #endregion
+
+            #region motion3.json
+            var motions = new SortedDictionary<string, JArray>();
+            var destMotionPath = Path.Combine(destPath, "motions") + Path.DirectorySeparatorChar;
+
+            if (motionMode == Live2DMotionMode.MonoBehaviour && FadeMotionLst != null) //Fade motions from Fade Motion List
+            {
+                Logger.Debug("Motion export method: MonoBehaviour (Fade motion)");
+                var fadeMotionLstDict = ParseMonoBehaviour(FadeMotionLst, CubismMonoBehaviourType.FadeMotionList, assemblyLoader);
+                if (fadeMotionLstDict != null)
+                {
+                    CubismObjectList.AssetsFile = FadeMotionLst.assetsFile;
+                    var fadeMotionAssetList = JsonConvert.DeserializeObject<CubismObjectList>(JsonConvert.SerializeObject(fadeMotionLstDict)).GetFadeMotionAssetList();
+                    if (fadeMotionAssetList?.Count > 0)
+                    {
+                        FadeMotions = fadeMotionAssetList;
+                        Logger.Debug($"\"{FadeMotionLst.m_Name}\": found {fadeMotionAssetList.Count} motion(s)");
+                    }
+                }
+            }
+            
+            if (motionMode == Live2DMotionMode.MonoBehaviour && FadeMotions.Count > 0)  //motion from MonoBehaviour
+            {
+                ExportFadeMotions(destMotionPath, assemblyLoader, forceBezier, motions);
+            }
+
+            if (motions.Count == 0) //motion from AnimationClip
+            {
+                CubismMotion3Converter converter = null;
+                var exportMethod = "AnimationClip";
+                if (motionMode != Live2DMotionMode.AnimationClipV1) //AnimationClipV2
+                {
+                    exportMethod += "V2";
+                    converter = new CubismMotion3Converter(AnimationClips, PartNames, ParameterNames);
+                }
+                else if (GameObjects.Count > 0) //AnimationClipV1
+                {
+                    exportMethod += "V1";
+                    var rootTransform = GameObjects[0].m_Transform;
+                    while (rootTransform.m_Father.TryGet(out var m_Father))
+                    {
+                        rootTransform = m_Father;
+                    }
+                    rootTransform.m_GameObject.TryGet(out var rootGameObject);
+                    converter = new CubismMotion3Converter(rootGameObject, AnimationClips);
+                }
+
+                if (motionMode == Live2DMotionMode.MonoBehaviour)
+                {
+                    exportMethod = FadeMotions.Count > 0
+                        ? exportMethod + " (unable to export motions using Fade motion method)"
+                        : exportMethod + " (no Fade motions found)";
+                }
+                Logger.Debug($"Motion export method: {exportMethod}");
+
+                ExportClipMotions(destMotionPath, converter, forceBezier, motions);
+            }
+
+            if (motions.Count == 0)
+            {
+                Logger.Warning($"No exportable motions found for \"{modelName}\" model");
+            }
+            else
+            {
+                Logger.Info($"Exported {motions.Count} motion(s)");
+            }
+            #endregion
+
+            #region exp3.json
             var expressions = new JArray();
-            var monoBehaviourArray = monoBehaviours.Where(x => x.m_Name.EndsWith(".exp3")).ToArray();
-            if (monoBehaviourArray.Length > 0)
+            var destExpressionPath = Path.Combine(destPath, "expressions") + Path.DirectorySeparatorChar;
+
+            if (Expressions.Count > 0)
             {
                 Directory.CreateDirectory(destExpressionPath);
             }
-            foreach (var monoBehaviour in monoBehaviourArray)
+            foreach (var monoBehaviour in Expressions)
             {
-                var fullName = monoBehaviour.m_Name;
-                var expressionName = fullName.Replace(".exp3", "");
-                var expressionObj = monoBehaviour.ToType();
-                if (expressionObj == null)
-                {
-                    var m_Type = monoBehaviour.ConvertToTypeTree(assemblyLoader);
-                    expressionObj = monoBehaviour.ToType(m_Type);
-                    if (expressionObj == null)
-                    {
-                        Logger.Warning($"Expression \"{expressionName}\" is not readable.");
-                        continue;
-                    }
-                }
-                var expression = JsonConvert.DeserializeObject<CubismExpression3Json>(JsonConvert.SerializeObject(expressionObj));
+                var expressionName = monoBehaviour.m_Name.Replace(".exp3", "");
+                var expressionDict = ParseMonoBehaviour(monoBehaviour, CubismMonoBehaviourType.Expression, assemblyLoader);
+                if (expressionDict == null)
+                    continue;
+                
+                var expression = JsonConvert.DeserializeObject<CubismExpression3Json>(JsonConvert.SerializeObject(expressionDict));
 
                 expressions.Add(new JObject
-                    {
-                        { "Name", expressionName },
-                        { "File", $"expressions/{fullName}.json" }
-                    });
-                File.WriteAllText($"{destExpressionPath}{fullName}.json", JsonConvert.SerializeObject(expression, Formatting.Indented));
+                {
+                    { "Name", expressionName },
+                    { "File", $"expressions/{expressionName}.exp3.json" }
+                });
+                File.WriteAllText($"{destExpressionPath}{expressionName}.exp3.json", JsonConvert.SerializeObject(expression, Formatting.Indented));
             }
+            #endregion
 
-            //model
+            #region model3.json
             var groups = new List<CubismModel3Json.SerializableGroup>();
 
-            var eyeBlinkParameters = monoBehaviours.Where(x =>
+            //Try looking for group IDs among the parameter names manually
+            if (EyeBlinkParameters.Count == 0)
             {
-                x.m_Script.TryGet(out var m_Script);
-                return m_Script?.m_ClassName == "CubismEyeBlinkParameter";
-            }).Select(x =>
-            {
-                x.m_GameObject.TryGet(out var m_GameObject);
-                return m_GameObject?.m_Name;
-            }).ToHashSet();
-            if (eyeBlinkParameters.Count == 0)
-            {
-                eyeBlinkParameters = gameObjects.Where(x =>
-                {
-                    return x.m_Name.ToLower().Contains("eye")
-                    && x.m_Name.ToLower().Contains("open")
-                    && (x.m_Name.ToLower().Contains('l') || x.m_Name.ToLower().Contains('r'));
-                }).Select(x => x.m_Name).ToHashSet();
+                EyeBlinkParameters = ParameterNames.Where(x =>
+                    x.ToLower().Contains("eye")
+                    && x.ToLower().Contains("open")
+                    && (x.ToLower().Contains('l') || x.ToLower().Contains('r'))
+                ).ToHashSet();
             }
+            if (LipSyncParameters.Count == 0)
+            {
+                LipSyncParameters = ParameterNames.Where(x =>
+                    x.ToLower().Contains("mouth")
+                    && x.ToLower().Contains("open")
+                    && x.ToLower().Contains('y')
+                ).ToHashSet();
+            }
+
             groups.Add(new CubismModel3Json.SerializableGroup
             {
                 Target = "Parameter",
                 Name = "EyeBlink",
-                Ids = eyeBlinkParameters.ToArray()
+                Ids = EyeBlinkParameters.ToArray()
             });
-
-            var lipSyncParameters = monoBehaviours.Where(x =>
-            {
-                x.m_Script.TryGet(out var m_Script);
-                return m_Script?.m_ClassName == "CubismMouthParameter";
-            }).Select(x =>
-            {
-                x.m_GameObject.TryGet(out var m_GameObject);
-                return m_GameObject?.m_Name;
-            }).ToHashSet();
-            if (lipSyncParameters.Count == 0)
-            {
-                lipSyncParameters = gameObjects.Where(x =>
-                {
-                    return x.m_Name.ToLower().Contains("mouth")
-                    && x.m_Name.ToLower().Contains("open")
-                    && x.m_Name.ToLower().Contains('y');
-                }).Select(x => x.m_Name).ToHashSet();
-            }
             groups.Add(new CubismModel3Json.SerializableGroup
             {
                 Target = "Parameter",
                 Name = "LipSync",
-                Ids = lipSyncParameters.ToArray()
+                Ids = LipSyncParameters.ToArray()
             });
-
+            
             var model3 = new CubismModel3Json
             {
                 Version = 3,
@@ -304,140 +408,90 @@ namespace CubismLive2DExtractor
                 {
                     Moc = $"{modelName}.moc3",
                     Textures = textures.ToArray(),
+                    DisplayInfo = isCdiParsed ? $"{modelName}.cdi3.json" : null,
+                    Physics = PhysicsMono != null ? $"{modelName}.physics3.json" : null,
                     Motions = JObject.FromObject(motions),
                     Expressions = expressions,
                 },
                 Groups = groups.ToArray()
             };
-            if (physics != null)
-            {
-                model3.FileReferences.Physics = $"{modelName}.physics3.json";
-            }
             File.WriteAllText($"{destPath}{modelName}.model3.json", JsonConvert.SerializeObject(model3, Formatting.Indented));
+            #endregion
         }
 
-        private static string ParsePhysics(MonoBehaviour physics, AssemblyLoader assemblyLoader)
+        private void ExportFadeMotions(string destMotionPath, AssemblyLoader assemblyLoader, bool forceBezier, SortedDictionary<string, JArray> motions)
         {
-            var physicsObj = physics.ToType();
-            if (physicsObj == null)
+            Directory.CreateDirectory(destMotionPath);
+            foreach (var fadeMotionMono in FadeMotions)
             {
-                var m_Type = physics.ConvertToTypeTree(assemblyLoader);
-                physicsObj = physics.ToType(m_Type);
-                if (physicsObj == null)
-                {
-                    throw new Exception("MonoBehaviour is not readable.");
-                }
-            }
-            var cubismPhysicsRig = JsonConvert.DeserializeObject<CubismPhysics>(JsonConvert.SerializeObject(physicsObj))._rig;
+                var fadeMotionDict = ParseMonoBehaviour(fadeMotionMono, CubismMonoBehaviourType.FadeMotion, assemblyLoader);
+                if (fadeMotionDict == null)
+                    continue;
+                
+                var fadeMotion = JsonConvert.DeserializeObject<CubismFadeMotion>(JsonConvert.SerializeObject(fadeMotionDict));
+                if (fadeMotion.ParameterIds.Length == 0)
+                    continue;
 
-            var physicsSettings = new CubismPhysics3Json.SerializablePhysicsSettings[cubismPhysicsRig.SubRigs.Length];
-            for (int i = 0; i < physicsSettings.Length; i++)
-            {
-                var subRigs = cubismPhysicsRig.SubRigs[i];
-                physicsSettings[i] = new CubismPhysics3Json.SerializablePhysicsSettings
+                var motionJson = new CubismMotion3Json(fadeMotion, ParameterNames, PartNames, forceBezier);
+
+                var animName = Path.GetFileNameWithoutExtension(fadeMotion.m_Name);
+                if (motions.ContainsKey(animName))
                 {
-                    Id = $"PhysicsSetting{i + 1}",
-                    Input = new CubismPhysics3Json.SerializableInput[subRigs.Input.Length],
-                    Output = new CubismPhysics3Json.SerializableOutput[subRigs.Output.Length],
-                    Vertices = new CubismPhysics3Json.SerializableVertex[subRigs.Particles.Length],
-                    Normalization = new CubismPhysics3Json.SerializableNormalization
-                    {
-                        Position = new CubismPhysics3Json.SerializableNormalizationValue
-                        {
-                            Minimum = subRigs.Normalization.Position.Minimum,
-                            Default = subRigs.Normalization.Position.Default,
-                            Maximum = subRigs.Normalization.Position.Maximum
-                        },
-                        Angle = new CubismPhysics3Json.SerializableNormalizationValue
-                        {
-                            Minimum = subRigs.Normalization.Angle.Minimum,
-                            Default = subRigs.Normalization.Angle.Default,
-                            Maximum = subRigs.Normalization.Angle.Maximum
-                        }
-                    }
-                };
-                for (int j = 0; j < subRigs.Input.Length; j++)
-                {
-                    var input = subRigs.Input[j];
-                    physicsSettings[i].Input[j] = new CubismPhysics3Json.SerializableInput
-                    {
-                        Source = new CubismPhysics3Json.SerializableParameter
-                        {
-                            Target = "Parameter", //同名GameObject父节点的名称
-                            Id = input.SourceId
-                        },
-                        Weight = input.Weight,
-                        Type = Enum.GetName(typeof(CubismPhysicsSourceComponent), input.SourceComponent),
-                        Reflect = input.IsInverted
-                    };
+                    animName = $"{animName}_{fadeMotion.GetHashCode()}";
+                    if (motions.ContainsKey(animName))
+                        continue;
                 }
-                for (int j = 0; j < subRigs.Output.Length; j++)
-                {
-                    var output = subRigs.Output[j];
-                    physicsSettings[i].Output[j] = new CubismPhysics3Json.SerializableOutput
-                    {
-                        Destination = new CubismPhysics3Json.SerializableParameter
-                        {
-                            Target = "Parameter", //同名GameObject父节点的名称
-                            Id = output.DestinationId
-                        },
-                        VertexIndex = output.ParticleIndex,
-                        Scale = output.AngleScale,
-                        Weight = output.Weight,
-                        Type = Enum.GetName(typeof(CubismPhysicsSourceComponent), output.SourceComponent),
-                        Reflect = output.IsInverted
-                    };
-                }
-                for (int j = 0; j < subRigs.Particles.Length; j++)
-                {
-                    var particles = subRigs.Particles[j];
-                    physicsSettings[i].Vertices[j] = new CubismPhysics3Json.SerializableVertex
-                    {
-                        Position = particles.InitialPosition,
-                        Mobility = particles.Mobility,
-                        Delay = particles.Delay,
-                        Acceleration = particles.Acceleration,
-                        Radius = particles.Radius
-                    };
-                }
+                var motionPath = new JObject(new JProperty("File", $"motions/{animName}.motion3.json"));
+                motions.Add(animName, new JArray(motionPath));
+                File.WriteAllText($"{destMotionPath}{animName}.motion3.json", JsonConvert.SerializeObject(motionJson, Formatting.Indented, new MyJsonConverter()));
             }
-            var physicsDictionary = new CubismPhysics3Json.SerializablePhysicsDictionary[physicsSettings.Length];
-            for (int i = 0; i < physicsSettings.Length; i++)
-            {
-                physicsDictionary[i] = new CubismPhysics3Json.SerializablePhysicsDictionary
-                {
-                    Id = $"PhysicsSetting{i + 1}",
-                    Name = $"Dummy{i + 1}"
-                };
-            }
-            var physicsJson = new CubismPhysics3Json
-            {
-                Version = 3,
-                Meta = new CubismPhysics3Json.SerializableMeta
-                {
-                    PhysicsSettingCount = cubismPhysicsRig.SubRigs.Length,
-                    TotalInputCount = cubismPhysicsRig.SubRigs.Sum(x => x.Input.Length),
-                    TotalOutputCount = cubismPhysicsRig.SubRigs.Sum(x => x.Output.Length),
-                    VertexCount = cubismPhysicsRig.SubRigs.Sum(x => x.Particles.Length),
-                    EffectiveForces = new CubismPhysics3Json.SerializableEffectiveForces
-                    {
-                        Gravity = cubismPhysicsRig.Gravity,
-                        Wind = cubismPhysicsRig.Wind
-                    },
-                    PhysicsDictionary = physicsDictionary
-                },
-                PhysicsSettings = physicsSettings
-            };
-            return JsonConvert.SerializeObject(physicsJson, Formatting.Indented, new MyJsonConverter2());
         }
 
-        private static byte[] ParseMoc(MonoBehaviour moc)
+        private static void ExportClipMotions(string destMotionPath, CubismMotion3Converter converter, bool forceBezier, SortedDictionary<string, JArray> motions)
         {
-            var reader = moc.reader;
-            reader.Reset();
-            reader.Position += 28; //PPtr<GameObject> m_GameObject, m_Enabled, PPtr<MonoScript>
-            reader.ReadAlignedString(); //m_Name
-            return reader.ReadBytes(reader.ReadInt32());
+            if (converter == null)
+                return;
+
+            if (converter.AnimationList.Count > 0)
+            {
+                Directory.CreateDirectory(destMotionPath);
+            }
+            foreach (var animation in converter.AnimationList)
+            {
+                var animName = animation.Name;
+                if (animation.TrackList.Count == 0)
+                {
+                    Logger.Warning($"Motion \"{animName}\" is empty. Export skipped");
+                    continue;
+                }
+                var motionJson = new CubismMotion3Json(animation, forceBezier);
+                
+                if (motions.ContainsKey(animName))
+                {
+                    animName = $"{animName}_{animation.GetHashCode()}";
+
+                    if (motions.ContainsKey(animName))
+                        continue;
+                }
+                var motionPath = new JObject(new JProperty("File", $"motions/{animName}.motion3.json"));
+                motions.Add(animName, new JArray(motionPath));
+                File.WriteAllText($"{destMotionPath}{animName}.motion3.json", JsonConvert.SerializeObject(motionJson, Formatting.Indented, new MyJsonConverter()));
+            }
+        }
+
+        private static string GetDisplayName(MonoBehaviour cdiMono, AssemblyLoader assemblyLoader)
+        {
+            var dict = ParseMonoBehaviour(cdiMono, CubismMonoBehaviourType.DisplayInfo, assemblyLoader);
+            if (dict == null)
+                return null;
+
+            var name = (string)dict["Name"];
+            if (dict.Contains("DisplayName"))
+            {
+                var displayName = (string)dict["DisplayName"];
+                name = displayName != "" ? displayName : name;
+            }
+            return name;
         }
     }
 }

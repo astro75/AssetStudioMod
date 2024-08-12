@@ -1,19 +1,43 @@
 ﻿using System.Collections.Specialized;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace AssetStudio
 {
     public class Object
     {
+        [JsonIgnore]
         public SerializedFile assetsFile;
+        [JsonIgnore]
         public ObjectReader reader;
         public long m_PathID;
-        public int[] version;
+        [JsonIgnore]
+        public UnityVersion version;
         protected BuildType buildType;
+        [JsonIgnore]
         public BuildTarget platform;
         public ClassIDType type;
+        [JsonIgnore]
         public SerializedType serializedType;
         public uint byteSize;
         public uint compressedSizeEstimate;
+        private static JsonSerializerOptions jsonOptions;
+
+        static Object()
+        {
+            jsonOptions = new JsonSerializerOptions
+            {
+                Converters = { new JsonConverterHelper.FloatConverter() },
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+                NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,
+                ReferenceHandler = ReferenceHandler.IgnoreCycles,
+                IncludeFields = true,
+                WriteIndented = true,
+            };
+        }
+
+        public Object() { }
 
         public Object(ObjectReader reader)
         {
@@ -36,40 +60,36 @@ namespace AssetStudio
             }
         }
 
-        public string Dump()
+        public string DumpObject()
         {
-            if (serializedType?.m_Type != null)
+            string str = null;
+            try
             {
-                return TypeTreeHelper.ReadTypeString(serializedType.m_Type, reader);
+                str = JsonSerializer.Serialize(this, GetType(), jsonOptions).Replace("  ", "    ");
             }
-            return null;
+            catch
+            {
+                //ignore
+            }
+            return str;
         }
 
-        public string Dump(TypeTree m_Type)
+        public string Dump(TypeTree m_Type = null)
         {
-            if (m_Type != null)
-            {
-                return TypeTreeHelper.ReadTypeString(m_Type, reader);
-            }
-            return null;
+            m_Type = m_Type ?? serializedType?.m_Type;
+            if (m_Type == null)
+                return null;
+
+            return TypeTreeHelper.ReadTypeString(m_Type, reader);
         }
 
-        public OrderedDictionary ToType()
+        public OrderedDictionary ToType(TypeTree m_Type = null)
         {
-            if (serializedType?.m_Type != null)
-            {
-                return TypeTreeHelper.ReadType(serializedType.m_Type, reader);
-            }
-            return null;
-        }
+            m_Type = m_Type ?? serializedType?.m_Type;
+            if (m_Type == null)
+                return null;
 
-        public OrderedDictionary ToType(TypeTree m_Type)
-        {
-            if (m_Type != null)
-            {
-                return TypeTreeHelper.ReadType(m_Type, reader);
-            }
-            return null;
+            return TypeTreeHelper.ReadType(m_Type, reader);
         }
 
         public byte[] GetRawData()

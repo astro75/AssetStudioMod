@@ -2,11 +2,11 @@
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <TargetFrameworks>net472;net6.0;net7.0</TargetFrameworks>
+        <TargetFrameworks>net472;net6.0;net7.0;net8.0</TargetFrameworks>
         <AssemblyTitle>AssetStudioMod by aelurum</AssemblyTitle>
         <AssemblyName>AssetStudioModCLI</AssemblyName>
-        <Version>0.17.3.0</Version>
-        <Copyright>Copyright © Perfare; Copyright © aelurum 2023</Copyright>
+        <Version>0.18.0.0</Version>
+        <Copyright>Copyright © Perfare; Copyright © aelurum 2023-2024</Copyright>
         <PlatformTarget>AnyCPU</PlatformTarget>
         <DebugType>embedded</DebugType>
     </PropertyGroup>

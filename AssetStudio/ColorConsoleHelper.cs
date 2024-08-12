@@ -2,11 +2,11 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace AssetStudioCLI
+namespace AssetStudio
 {
-    static class CLIWinAnsiFix
+    internal static class ColorConsoleHelper
     {
-        public static readonly bool isAnsiSupported;
+        public static readonly bool isAnsiCodesSupported;
         private const int STD_OUTPUT_HANDLE = -11;
         private const uint ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004;
 
@@ -19,21 +19,21 @@ namespace AssetStudioCLI
         [DllImport("kernel32.dll")]
         private static extern IntPtr GetStdHandle(int nStdHandle);
 
-        static CLIWinAnsiFix()
+        static ColorConsoleHelper()
         { 
-            bool isWin = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+            var isWin = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
             if (isWin)
             {
-                isAnsiSupported = TryEnableVTMode();
-                if (!isAnsiSupported)
+                isAnsiCodesSupported = TryEnableVTMode();
+                if (!isAnsiCodesSupported)
                 {
                     //Check for bash terminal emulator. E.g., Git Bash, Cmder
-                    isAnsiSupported = Environment.GetEnvironmentVariable("TERM") != null;
+                    isAnsiCodesSupported = Environment.GetEnvironmentVariable("TERM") != null;
                 }
             }
             else
             {
-                isAnsiSupported = true;
+                isAnsiCodesSupported = true;
             }
         }
 
@@ -51,12 +51,7 @@ namespace AssetStudioCLI
 
             outConsoleMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
 
-            if (!SetConsoleMode(iStdOut, outConsoleMode))
-            {
-                return false;
-            }
-
-            return true;
+            return SetConsoleMode(iStdOut, outConsoleMode);
         }
     }
 }

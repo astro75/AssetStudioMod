@@ -18,7 +18,7 @@ namespace AssetStudio
             var m_SkinNormals = reader.ReadBoolean(); //3.1.0 and below
             reader.AlignStream();
 
-            if (version[0] == 2 && version[1] < 6) //2.6 down
+            if (version < (2, 6)) //2.6 down
             {
                 var m_DisableAnimationWhenOffscreen = new PPtr<Animation>(reader);
             }
@@ -31,7 +31,7 @@ namespace AssetStudio
                 m_Bones[b] = new PPtr<Transform>(reader);
             }
 
-            if (version[0] > 4 || (version[0] == 4 && version[1] >= 3)) //4.3 and up
+            if (version >= (4, 3)) //4.3 and up
             {
                 m_BlendShapeWeights = reader.ReadSingleArray();
             }

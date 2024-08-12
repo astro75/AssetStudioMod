@@ -1,5 +1,12 @@
 ﻿namespace CubismLive2DExtractor
 {
+    public enum BlendType
+    {
+        Add,
+        Multiply,
+        Overwrite,
+    }
+
     public class CubismExpression3Json
     {
         public string Type;
@@ -11,7 +18,7 @@
         {
             public string Id;
             public float Value;
-            public int Blend;
+            public BlendType Blend;
         }
     }
 }

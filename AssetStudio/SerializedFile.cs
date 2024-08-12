@@ -13,7 +13,7 @@ namespace AssetStudio
         public string fullName;
         public string originalPath;
         public string fileName;
-        public int[] version = { 0, 0, 0, 0 };
+        public UnityVersion version = new UnityVersion();
         public BuildType buildType;
         public List<Object> Objects;
         public Dictionary<long, Object> ObjectsDic;
@@ -73,7 +73,7 @@ namespace AssetStudio
             if (header.m_Version >= SerializedFileFormatVersion.Unknown_7)
             {
                 unityVersion = reader.ReadStringToNull();
-                SetVersion(unityVersion);
+                SetVersion(new UnityVersion(unityVersion));
             }
             if (header.m_Version >= SerializedFileFormatVersion.Unknown_8)
             {
@@ -217,19 +217,13 @@ namespace AssetStudio
             //reader.AlignStream(16);
         }
 
-        public void SetVersion(string stringVersion)
+        public void SetVersion(UnityVersion unityVer)
         {
-            if (stringVersion != strippedVersion)
+            if (unityVer != null && !unityVer.IsStripped)
             {
-                unityVersion = stringVersion;
-                var buildSplit = Regex.Replace(stringVersion, @"\d", "").Split(new[] { "." }, StringSplitOptions.RemoveEmptyEntries);
-                if (buildSplit.Length == 0)
-                    throw new NotSupportedException("Specified Unity version is not in a correct format.\n" +
-                        "Specify full Unity version, including letters at the end.\n" +
-                        "Example: 2017.4.39f1");
-                buildType = new BuildType(buildSplit[0]);
-                var versionSplit = Regex.Replace(stringVersion, @"\D", ".").Split(new[] { "." }, StringSplitOptions.RemoveEmptyEntries);
-                version = versionSplit.Select(int.Parse).ToArray();
+                unityVersion = unityVer.FullVersion;
+                buildType = new BuildType(unityVer.BuildType);
+                version = unityVer;
             }
         }
 
@@ -377,9 +371,5 @@ namespace AssetStudio
             Objects.Add(obj);
             ObjectsDic.Add(obj.m_PathID, obj);
         }
-
-        public bool IsVersionStripped => unityVersion == strippedVersion;
-
-        private const string strippedVersion = "0.0.0";
     }
 }

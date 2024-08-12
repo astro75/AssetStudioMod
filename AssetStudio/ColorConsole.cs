@@ -1,10 +1,10 @@
 ﻿using System;
 
-namespace AssetStudioCLI
+namespace AssetStudio
 {
     // Represents set with 16 base colors using ANSI escape codes, which should be supported in most terminals
     // (well, except for windows editions before windows 10)
-    public static class CLIAnsiColors
+    public static class ColorConsole
     {
         public static readonly string
             Black = "\u001b[30m",
@@ -27,7 +27,7 @@ namespace AssetStudioCLI
 
         public static string Color(this string str, string ansiColor)
         {
-            if (!CLIWinAnsiFix.isAnsiSupported)
+            if (!ColorConsoleHelper.isAnsiCodesSupported)
             {
                 return str;
             }
@@ -35,10 +35,10 @@ namespace AssetStudioCLI
             return $"{ansiColor}{str}{Reset}";
         }
 
-        public static void ANSICodesTest()
+        public static void AnsiCodesTest()
         {
             Console.WriteLine("ANSI escape codes test");
-            Console.WriteLine($"Supported: {CLIWinAnsiFix.isAnsiSupported}");
+            Console.WriteLine($"Supported: {ColorConsoleHelper.isAnsiCodesSupported}");
             Console.WriteLine("\u001b[30m A \u001b[31m B \u001b[32m C \u001b[33m D \u001b[0m");
             Console.WriteLine("\u001b[34m E \u001b[35m F \u001b[36m G \u001b[37m H \u001b[0m");
             Console.WriteLine("\u001b[30;1m A \u001b[31;1m B \u001b[32;1m C \u001b[33;1m D \u001b[0m");

@@ -40,7 +40,7 @@ namespace AssetStudio
 
             m_Vertices = new PackedFloatVector(reader);
             m_UV = new PackedFloatVector(reader);
-            if (version[0] < 5)
+            if (version < 5)
             {
                 m_BindPoses = new PackedFloatVector(reader);
             }
@@ -49,15 +49,15 @@ namespace AssetStudio
             m_Weights = new PackedIntVector(reader);
             m_NormalSigns = new PackedIntVector(reader);
             m_TangentSigns = new PackedIntVector(reader);
-            if (version[0] >= 5)
+            if (version >= 5)
             {
                 m_FloatColors = new PackedFloatVector(reader);
             }
             m_BoneIndices = new PackedIntVector(reader);
             m_Triangles = new PackedIntVector(reader);
-            if (version[0] > 3 || (version[0] == 3 && version[1] >= 5)) //3.5 and up
+            if (version >= (3, 5)) //3.5 and up
             {
-                if (version[0] < 5)
+                if (version < 5)
                 {
                     m_Colors = new PackedIntVector(reader);
                 }
@@ -87,7 +87,7 @@ namespace AssetStudio
             channelMask = reader.ReadUInt32();
             offset = reader.ReadUInt32();
 
-            if (version[0] < 4) //4.0 down
+            if (version < 4) //4.0 down
             {
                 stride = reader.ReadUInt32();
                 align = reader.ReadUInt32();
@@ -131,14 +131,14 @@ namespace AssetStudio
         {
             var version = reader.version;
 
-            if (version[0] < 2018)//2018 down
+            if (version < 2018)//2018 down
             {
                 m_CurrentChannels = reader.ReadUInt32();
             }
 
             m_VertexCount = reader.ReadUInt32();
 
-            if (version[0] >= 4) //4.0 and up
+            if (version >= 4) //4.0 and up
             {
                 var m_ChannelsSize = reader.ReadInt32();
                 m_Channels = new ChannelInfo[m_ChannelsSize];
@@ -148,9 +148,9 @@ namespace AssetStudio
                 }
             }
 
-            if (version[0] < 5) //5.0 down
+            if (version < 5) //5.0 down
             {
-                if (version[0] < 4)
+                if (version < 4)
                 {
                     m_Streams = new StreamInfo[4];
                 }
@@ -164,7 +164,7 @@ namespace AssetStudio
                     m_Streams[i] = new StreamInfo(reader);
                 }
 
-                if (version[0] < 4) //4.0 down
+                if (version < 4) //4.0 down
                 {
                     GetChannels(version);
                 }
@@ -178,7 +178,7 @@ namespace AssetStudio
             reader.AlignStream();
         }
 
-        private void GetStreams(int[] version)
+        private void GetStreams(UnityVersion version)
         {
             var streamCount = m_Channels.Max(x => x.stream) + 1;
             m_Streams = new StreamInfo[streamCount];
@@ -213,7 +213,7 @@ namespace AssetStudio
             }
         }
 
-        private void GetChannels(int[] version)
+        private void GetChannels(UnityVersion version)
         {
             m_Channels = new ChannelInfo[6];
             for (int i = 0; i < 6; i++)
@@ -305,20 +305,20 @@ namespace AssetStudio
         {
             var version = reader.version;
 
-            if (version[0] == 4 && version[1] < 3) //4.3 down
+            if (version < (4, 3)) //4.3 down
             {
                 var name = reader.ReadAlignedString();
             }
             firstVertex = reader.ReadUInt32();
             vertexCount = reader.ReadUInt32();
-            if (version[0] == 4 && version[1] < 3) //4.3 down
+            if (version < (4, 3)) //4.3 down
             {
                 var aabbMinDelta = reader.ReadVector3();
                 var aabbMaxDelta = reader.ReadVector3();
             }
             hasNormals = reader.ReadBoolean();
             hasTangents = reader.ReadBoolean();
-            if (version[0] > 4 || (version[0] == 4 && version[1] >= 3)) //4.3 and up
+            if (version >= (4, 3)) //4.3 and up
             {
                 reader.AlignStream();
             }
@@ -352,7 +352,7 @@ namespace AssetStudio
         {
             var version = reader.version;
 
-            if (version[0] > 4 || (version[0] == 4 && version[1] >= 3)) //4.3 and up
+            if (version >= (4, 3)) //4.3 and up
             {
                 int numVerts = reader.ReadInt32();
                 vertices = new BlendShapeVertex[numVerts];
@@ -425,17 +425,17 @@ namespace AssetStudio
             indexCount = reader.ReadUInt32();
             topology = (GfxPrimitiveType)reader.ReadInt32();
 
-            if (version[0] < 4) //4.0 down
+            if (version < 4) //4.0 down
             {
                 triangleCount = reader.ReadUInt32();
             }
 
-            if (version[0] > 2017 || (version[0] == 2017 && version[1] >= 3)) //2017.3 and up
+            if (version >= (2017, 3)) //2017.3 and up
             {
                 baseVertex = reader.ReadUInt32();
             }
 
-            if (version[0] >= 3) //3.0 and up
+            if (version >= 3) //3.0 and up
             {
                 firstVertex = reader.ReadUInt32();
                 vertexCount = reader.ReadUInt32();
@@ -474,12 +474,12 @@ namespace AssetStudio
 
         public Mesh(ObjectReader reader) : base(reader)
         {
-            if (version[0] < 3 || (version[0] == 3 && version[1] < 5)) //3.5 down
+            if (version < (3, 5)) //3.5 down
             {
                 m_Use16BitIndices = reader.ReadInt32() > 0;
             }
 
-            if (version[0] == 2 && version[1] <= 5) //2.5 and down
+            if (version <= (2, 5)) //2.5 and down
             {
                 int m_IndexBuffer_size = reader.ReadInt32();
 
@@ -505,21 +505,21 @@ namespace AssetStudio
                 m_SubMeshes[i] = new SubMesh(reader);
             }
 
-            if (version[0] > 4 || (version[0] == 4 && version[1] >= 1)) //4.1 and up
+            if (version >= (4, 1)) //4.1 and up
             {
                 m_Shapes = new BlendShapeData(reader);
             }
 
-            if (version[0] > 4 || (version[0] == 4 && version[1] >= 3)) //4.3 and up
+            if (version >= (4, 3)) //4.3 and up
             {
                 m_BindPose = reader.ReadMatrixArray();
                 m_BoneNameHashes = reader.ReadUInt32Array();
                 var m_RootBoneNameHash = reader.ReadUInt32();
             }
 
-            if (version[0] > 2 || (version[0] == 2 && version[1] >= 6)) //2.6.0 and up
+            if (version >= (2, 6)) //2.6.0 and up
             {
-                if (version[0] >= 2019) //2019 and up
+                if (version >= 2019) //2019 and up
                 {
                     var m_BonesAABBSize = reader.ReadInt32();
                     var m_BonesAABB = new MinMaxAABB[m_BonesAABBSize];
@@ -532,9 +532,9 @@ namespace AssetStudio
                 }
 
                 var m_MeshCompression = reader.ReadByte();
-                if (version[0] >= 4)
+                if (version >= 4)
                 {
-                    if (version[0] < 5)
+                    if (version < 5)
                     {
                         var m_StreamCompression = reader.ReadByte();
                     }
@@ -545,9 +545,9 @@ namespace AssetStudio
                 reader.AlignStream();
 
                 //Unity fixed it in 2017.3.1p1 and later versions
-                if ((version[0] > 2017 || (version[0] == 2017 && version[1] >= 4)) || //2017.4
-                    ((version[0] == 2017 && version[1] == 3 && version[2] == 1) && buildType.IsPatch) || //fixed after 2017.3.1px
-                    ((version[0] == 2017 && version[1] == 3) && m_MeshCompression == 0))//2017.3.xfx with no compression
+                if (version >= (2017, 4) //2017.4
+                    || version == (2017, 3, 1) && buildType.IsPatch //fixed after 2017.3.1px
+                    || version == (2017, 3) && m_MeshCompression == 0)//2017.3.xfx with no compression
                 {
                     var m_IndexFormat = reader.ReadInt32();
                     m_Use16BitIndices = m_IndexFormat == 0;
@@ -569,7 +569,7 @@ namespace AssetStudio
                 }
             }
 
-            if (version[0] < 3 || (version[0] == 3 && version[1] < 5)) //3.4.2 and earlier
+            if (version < (3, 5)) //3.4.2 and earlier
             {
                 m_VertexCount = reader.ReadInt32();
                 m_Vertices = reader.ReadSingleArray(m_VertexCount * 3); //Vector3
@@ -586,7 +586,7 @@ namespace AssetStudio
 
                 m_UV1 = reader.ReadSingleArray(reader.ReadInt32() * 2); //Vector2
 
-                if (version[0] == 2 && version[1] <= 5) //2.5 and down
+                if (version <= (2, 5)) //2.5 and down
                 {
                     int m_TangentSpace_size = reader.ReadInt32();
                     m_Normals = new float[m_TangentSpace_size * 3];
@@ -611,7 +611,7 @@ namespace AssetStudio
             }
             else
             {
-                if (version[0] < 2018 || (version[0] == 2018 && version[1] < 2)) //2018.2 down
+                if (version < (2018, 2)) //2018.2 down
                 {
                     m_Skin = new BoneWeights4[reader.ReadInt32()];
                     for (int s = 0; s < m_Skin.Length; s++)
@@ -620,7 +620,7 @@ namespace AssetStudio
                     }
                 }
 
-                if (version[0] == 3 || (version[0] == 4 && version[1] <= 2)) //4.2 and down
+                if (version <= (4, 2)) //4.2 and down
                 {
                     m_BindPose = reader.ReadMatrixArray();
                 }
@@ -628,14 +628,14 @@ namespace AssetStudio
                 m_VertexData = new VertexData(reader);
             }
 
-            if (version[0] > 2 || (version[0] == 2 && version[1] >= 6)) //2.6.0 and later
+            if (version >= (2, 6)) //2.6.0 and later
             {
                 m_CompressedMesh = new CompressedMesh(reader);
             }
 
             reader.Position += 24; //AABB m_LocalAABB
 
-            if (version[0] < 3 || (version[0] == 3 && version[1] <= 4)) //3.4.2 and earlier
+            if (version <= (3, 4)) //3.4.2 and earlier
             {
                 int m_Colors_size = reader.ReadInt32();
                 m_Colors = new float[m_Colors_size * 4];
@@ -651,12 +651,12 @@ namespace AssetStudio
 
             int m_MeshUsageFlags = reader.ReadInt32();
 
-            if (version[0] > 2022 || (version[0] == 2022 && version[1] >= 1)) //2022.1 and up
+            if (version >= (2022, 1)) //2022.1 and up
             {
                 int m_CookingOptions = reader.ReadInt32();
             }
 
-            if (version[0] >= 5) //5.0 and up
+            if (version >= 5) //5.0 and up
             {
                 var m_BakedConvexCollisionMesh = reader.ReadUInt8Array();
                 reader.AlignStream();
@@ -664,14 +664,14 @@ namespace AssetStudio
                 reader.AlignStream();
             }
 
-            if (version[0] > 2018 || (version[0] == 2018 && version[1] >= 2)) //2018.2 and up
+            if (version >= (2018, 2)) //2018.2 and up
             {
                 var m_MeshMetrics = new float[2];
                 m_MeshMetrics[0] = reader.ReadSingle();
                 m_MeshMetrics[1] = reader.ReadSingle();
             }
 
-            if (version[0] > 2018 || (version[0] == 2018 && version[1] >= 3)) //2018.3 and up
+            if (version >= (2018, 3)) //2018.3 and up
             {
                 reader.AlignStream();
                 m_StreamData = new StreamingInfo(reader);
@@ -690,12 +690,12 @@ namespace AssetStudio
                     m_VertexData.m_DataSize = resourceReader.GetData();
                 }
             }
-            if (version[0] > 3 || (version[0] == 3 && version[1] >= 5)) //3.5 and up
+            if (version >= (3, 5)) //3.5 and up
             {
                 ReadVertexData();
             }
 
-            if (version[0] > 2 || (version[0] == 2 && version[1] >= 6)) //2.6.0 and later
+            if (version >= (2, 6)) //2.6.0 and later
             {
                 DecompressCompressedMesh();
             }
@@ -716,7 +716,7 @@ namespace AssetStudio
                     var channelMask = new BitArray(new[] { (int)m_Stream.channelMask });
                     if (channelMask.Get(chn))
                     {
-                        if (version[0] < 2018 && chn == 2 && m_Channel.format == 2) //kShaderChannelColor && kChannelFormatColor
+                        if (version < 2018 && chn == 2 && m_Channel.format == 2) //kShaderChannelColor && kChannelFormatColor
                         {
                             m_Channel.dimension = 4;
                         }
@@ -752,7 +752,7 @@ namespace AssetStudio
                         else
                             componentsFloatArray = MeshHelper.BytesToFloatArray(componentBytes, vertexFormat);
 
-                        if (version[0] >= 2018)
+                        if (version >= 2018)
                         {
                             switch (chn)
                             {
@@ -841,7 +841,7 @@ namespace AssetStudio
                                     m_UV1 = componentsFloatArray;
                                     break;
                                 case 5:
-                                    if (version[0] >= 5) //kShaderChannelTexCoord2
+                                    if (version >= 5) //kShaderChannelTexCoord2
                                     {
                                         m_UV2 = componentsFloatArray;
                                     }
@@ -906,7 +906,7 @@ namespace AssetStudio
                 }
             }
             //BindPose
-            if (version[0] < 5)
+            if (version < 5)
             {
                 if (m_CompressedMesh.m_BindPoses.m_NumItems > 0)
                 {
@@ -983,7 +983,7 @@ namespace AssetStudio
                 }
             }
             //FloatColor
-            if (version[0] >= 5)
+            if (version >= 5)
             {
                 if (m_CompressedMesh.m_FloatColors.m_NumItems > 0)
                 {
@@ -1074,7 +1074,7 @@ namespace AssetStudio
                         m_Indices.Add(m_IndexBuffer[firstIndex + i + 2]);
                     }
                 }
-                else if (version[0] < 4 || topology == GfxPrimitiveType.TriangleStrip)
+                else if (version < 4 || topology == GfxPrimitiveType.TriangleStrip)
                 {
                     // de-stripify :
                     uint triIndex = 0;
@@ -1238,9 +1238,9 @@ namespace AssetStudio
             SInt32
         }
 
-        public static VertexFormat ToVertexFormat(int format, int[] version)
+        public static VertexFormat ToVertexFormat(int format, UnityVersion version)
         {
-            if (version[0] < 2017)
+            if (version < 2017)
             {
                 switch ((VertexChannelFormat)format)
                 {
@@ -1258,7 +1258,7 @@ namespace AssetStudio
                         throw new ArgumentOutOfRangeException(nameof(format), format, null);
                 }
             }
-            else if (version[0] < 2019)
+            else if (version < 2019)
             {
                 switch ((VertexFormat2017)format)
                 {

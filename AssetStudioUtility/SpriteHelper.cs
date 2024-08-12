@@ -154,9 +154,16 @@ namespace AssetStudio
                         if (triangles.Length < 1024)
                         {
                             var rectP = new RectangularPolygon(0, 0, rect.Width, rect.Height);
-                            spriteImage.Mutate(x => x.Fill(options, SixLabors.ImageSharp.Color.Red, rectP.Clip(path)));
-                            spriteImage.Mutate(x => x.Flip(FlipMode.Vertical));
-                            return spriteImage;
+                            try
+                            {
+                                spriteImage.Mutate(x => x.Fill(options, SixLabors.ImageSharp.Color.Red, rectP.Clip(path)));
+                                spriteImage.Mutate(x => x.Flip(FlipMode.Vertical));
+                                return spriteImage;
+                            }
+                            catch (ArgumentOutOfRangeException)
+                            {
+                                // ignored
+                            }
                         }
                         using (var mask = new Image<Bgra32>(rect.Width, rect.Height, SixLabors.ImageSharp.Color.Black))
                         {
@@ -167,9 +174,9 @@ namespace AssetStudio
                             return spriteImage;
                         }
                     }
-                    catch
+                    catch (Exception e)
                     {
-                        // ignored
+                        Logger.Warning($"{m_Sprite.m_Name} Unable to render the packed sprite correctly.\n{e}");
                     }
                 }
 

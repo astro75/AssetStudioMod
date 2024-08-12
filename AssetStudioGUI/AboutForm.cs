@@ -10,13 +10,15 @@ namespace AssetStudioGUI
         public AboutForm()
         {
             InitializeComponent();
-            var productName = Application.ProductName;
             var arch = Environment.Is64BitProcess ? "x64" : "x32";
+            var appAssembly = typeof(Program).Assembly.GetName();
+            var productName = appAssembly.Name;
+            var productVer = appAssembly.Version.ToString();
             Text += " " + productName;
             productTitleLabel.Text = productName;
-            productVersionLabel.Text = $"v{Application.ProductVersion} [{arch}]";
+            productVersionLabel.Text = $"v{productVer} [{arch}]";
             productNamelabel.Text = productName;
-            modVersionLabel.Text = Application.ProductVersion;
+            modVersionLabel.Text = productVer;
 
             licenseRichTextBox.Text = GetLicenseText();
         }

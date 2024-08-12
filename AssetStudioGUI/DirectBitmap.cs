@@ -43,6 +43,6 @@ namespace AssetStudioGUI
         public Bitmap Bitmap => m_bitmap;
 
         private Bitmap m_bitmap;
-        private readonly GCHandle m_handle;
+        private GCHandle m_handle;
     }
 }

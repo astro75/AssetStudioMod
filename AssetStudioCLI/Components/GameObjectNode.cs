@@ -1,5 +1,4 @@
 using AssetStudio;
-using System.Collections.Generic;
 
 namespace AssetStudioCLI
 {
@@ -7,10 +6,9 @@ namespace AssetStudioCLI
     {
         public GameObject gameObject;
 
-        public GameObjectNode(GameObject gameObject)
+        public GameObjectNode(GameObject gameObject) : base(gameObject.m_Name)
         {
             this.gameObject = gameObject;
         }
-
     }
 }

@@ -17,7 +17,7 @@ namespace AssetStudio
         public BuildTarget platform;
         public SerializedFileFormatVersion m_Version;
 
-        public int[] version => assetsFile.version;
+        public UnityVersion version => assetsFile.version;
         public BuildType buildType => assetsFile.buildType;
 
         public ObjectReader(EndianBinaryReader reader, SerializedFile assetsFile, ObjectInfo objectInfo) : base(reader.BaseStream, reader.Endian)

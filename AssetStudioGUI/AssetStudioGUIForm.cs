@@ -43,6 +43,8 @@ namespace AssetStudioGUI
         private FMOD.SoundGroup masterSoundGroup;
         private FMOD.MODE loopMode = FMOD.MODE.LOOP_OFF;
         private uint FMODlenms;
+        private uint FMODloopstartms;
+        private uint FMODloopendms;
         private float FMODVolume = 0.8f;
 
         #region SpriteControl
@@ -89,6 +91,10 @@ namespace AssetStudioGUI
         private AlphanumComparatorFast alphanumComparator = new AlphanumComparatorFast();
 #endif
 
+        //asset list selection
+        private List<int> selectedIndicesPrevList = new List<int>();
+        private List<AssetItem> selectedAnimationAssetsList = new List<AssetItem>();
+
         //asset list filter
         private System.Timers.Timer delayTimer;
         private bool enableFiltering;
@@ -112,21 +118,33 @@ namespace AssetStudioGUI
         [DllImport("gdi32.dll")]
         private static extern IntPtr AddFontMemResourceEx(IntPtr pbFont, uint cbFont, IntPtr pdv, [In] ref uint pcFonts);
 
+        private string guiTitle = string.Empty;
+
         public AssetStudioGUIForm()
         {
             Thread.CurrentThread.CurrentCulture = new CultureInfo("en-US");
+            ConsoleWindow.RunConsole(Properties.Settings.Default.showConsole);
             InitializeComponent();
-            Text = $"{Application.ProductName} v{Application.ProductVersion}";
+
+            var appAssembly = typeof(Program).Assembly.GetName();
+            guiTitle = $"{appAssembly.Name} v{appAssembly.Version}";
+            Text = guiTitle;
+
             delayTimer = new System.Timers.Timer(800);
-            delayTimer.Elapsed += new ElapsedEventHandler(delayTimer_Elapsed);
+            delayTimer.Elapsed += delayTimer_Elapsed;
             displayAll.Checked = Properties.Settings.Default.displayAll;
             displayInfo.Checked = Properties.Settings.Default.displayInfo;
             enablePreview.Checked = Properties.Settings.Default.enablePreview;
+            showConsoleToolStripMenuItem.Checked = Properties.Settings.Default.showConsole;
+            buildTreeStructureToolStripMenuItem.Checked = Properties.Settings.Default.buildTreeStructure;
+            useAssetLoadingViaTypetreeToolStripMenuItem.Checked = Properties.Settings.Default.useTypetreeLoading;
             FMODinit();
             listSearchFilterMode.SelectedIndex = 0;
 
             logger = new GUILogger(StatusStripUpdate);
             Logger.Default = logger;
+            writeLogToFileToolStripMenuItem.Checked = Properties.Settings.Default.useFileLogger;
+
             Progress.Default = new Progress<int>(SetProgressBarValue);
             Studio.StatusStripUpdate = StatusStripUpdate;
         }
@@ -135,21 +153,31 @@ namespace AssetStudioGUI
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
-                e.Effect = DragDropEffects.Move;
+                e.Effect = DragDropEffects.Copy;
             }
         }
 
         private async void AssetStudioGUIForm_DragDrop(object sender, DragEventArgs e)
         {
             var paths = (string[])e.Data.GetData(DataFormats.FileDrop);
-            if (paths.Length > 0)
+            if (paths.Length == 0)
+                return;
+
+            ResetForm();
+            for (var i = 0; i < paths.Length; i++)
             {
-                ResetForm();
-                assetsManager.SpecifyUnityVersion = specifyUnityVersion.Text;
-                await Task.Run(() => assetsManager.LoadFilesAndFolders(out openDirectoryBackup, paths));
-                saveDirectoryBackup = openDirectoryBackup;
-                BuildAssetStructures();
+                if (paths[i].ToLower().EndsWith(".lnk"))
+                {
+                    var targetPath = LnkReader.GetLnkTarget(paths[i]);
+                    if (!string.IsNullOrEmpty(targetPath))
+                    {
+                        paths[i] = targetPath;
+                    }
+                }
             }
+            await Task.Run(() => assetsManager.LoadFilesAndFolders(out openDirectoryBackup, paths));
+            saveDirectoryBackup = openDirectoryBackup;
+            BuildAssetStructures();
         }
 
         private async void loadFile_Click(object sender, EventArgs e)
@@ -158,7 +186,6 @@ namespace AssetStudioGUI
             if (openFileDialog1.ShowDialog(this) == DialogResult.OK)
             {
                 ResetForm();
-                assetsManager.SpecifyUnityVersion = specifyUnityVersion.Text;
                 await Task.Run(() => assetsManager.LoadFilesAndFolders(out openDirectoryBackup, openFileDialog1.FileNames));
                 BuildAssetStructures();
             }
@@ -171,9 +198,26 @@ namespace AssetStudioGUI
             if (openFolderDialog.ShowDialog(this) == DialogResult.OK)
             {
                 ResetForm();
-                assetsManager.SpecifyUnityVersion = specifyUnityVersion.Text;
                 await Task.Run(() => assetsManager.LoadFilesAndFolders(out openDirectoryBackup, openFolderDialog.Folder));
                 BuildAssetStructures();
+            }
+        }
+
+        private void specifyUnityVersion_Close(object sender, EventArgs e)
+        {
+            if (string.IsNullOrEmpty(specifyUnityVersion.Text))
+            {
+                assetsManager.SpecifyUnityVersion = null;
+                return;
+            }
+            
+            try
+            {
+                assetsManager.SpecifyUnityVersion = new UnityVersion(specifyUnityVersion.Text);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex.Message);
             }
         }
 
@@ -218,17 +262,11 @@ namespace AssetStudioGUI
                 return;
             }
 
-            (var productName, var treeNodeCollection) = await Task.Run(() => BuildAssetData());
+            var (productName, treeNodeCollection) = await Task.Run(() => BuildAssetData());
             var typeMap = await Task.Run(() => BuildClassStructure());
+            productName = string.IsNullOrEmpty(productName) ? "no productName" : productName;
 
-            if (!string.IsNullOrEmpty(productName))
-            {
-                Text = $"{Application.ProductName} v{Application.ProductVersion} - {productName} - {assetsManager.assetsFileList[0].unityVersion} - {assetsManager.assetsFileList[0].m_TargetPlatform}";
-            }
-            else
-            {
-                Text = $"{Application.ProductName} v{Application.ProductVersion} - no productName - {assetsManager.assetsFileList[0].unityVersion} - {assetsManager.assetsFileList[0].m_TargetPlatform}";
-            }
+            Text = $"{guiTitle} - {productName} - {assetsManager.assetsFileList[0].unityVersion} - {assetsManager.assetsFileList[0].m_TargetPlatform}";
 
             assetListView.VirtualListSize = visibleAssets.Count;
 
@@ -252,23 +290,28 @@ namespace AssetStudioGUI
             typeMap.Clear();
             classesListView.EndUpdate();
 
-            var types = exportableAssets.Select(x => x.Type).Distinct().OrderBy(x => x.ToString()).ToArray();
-            foreach (var type in types)
+            var types = new SortedSet<string>();
+            types.UnionWith(exportableAssets.Select(x => x.TypeString));
+            if (Studio.cubismMocList.Count > 0)
+            {
+                types.Add("MonoBehaviour (Live2D Model)");
+            }
+            foreach (var typeString in types)
             {
                 var typeItem = new ToolStripMenuItem
                 {
                     CheckOnClick = true,
-                    Name = type.ToString(),
+                    Name = typeString,
                     Size = new Size(180, 22),
-                    Text = type.ToString()
+                    Text = typeString
                 };
                 typeItem.Click += typeToolStripMenuItem_Click;
                 filterTypeToolStripMenuItem.DropDownItems.Add(typeItem);
             }
             allToolStripMenuItem.Checked = true;
-            var log = $"Finished loading {assetsManager.assetsFileList.Count} files with {assetListView.Items.Count} exportable assets";
+            var log = $"Finished loading {assetsManager.assetsFileList.Count} file(s) with {assetListView.Items.Count} exportable assets";
             var unityVer = assetsManager.assetsFileList[0].version;
-            var m_ObjectsCount = unityVer[0] > 2020 ?
+            var m_ObjectsCount = unityVer > 2020 ?
                 assetsManager.assetsFileList.Sum(x => x.m_Objects.LongCount(y => y.classID != (int)ClassIDType.Shader)) :
                 assetsManager.assetsFileList.Sum(x => x.m_Objects.Count);
             var objectsCount = assetsManager.assetsFileList.Sum(x => x.Objects.Count);
@@ -285,6 +328,22 @@ namespace AssetStudioGUI
             if (typeItem != allToolStripMenuItem)
             {
                 allToolStripMenuItem.Checked = false;
+
+                var monoBehaviourItemArray = filterTypeToolStripMenuItem.DropDownItems.Find("MonoBehaviour", false);
+                var monoBehaviourMocItemArray = filterTypeToolStripMenuItem.DropDownItems.Find("MonoBehaviour (Live2D Model)", false);
+                if (monoBehaviourItemArray.Length > 0 && monoBehaviourMocItemArray.Length > 0)
+                {
+                    var monoBehaviourItem = (ToolStripMenuItem)monoBehaviourItemArray[0];
+                    var monoBehaviourMocItem = (ToolStripMenuItem)monoBehaviourMocItemArray[0];
+                    if (typeItem == monoBehaviourItem && monoBehaviourItem.Checked)
+                    {
+                        monoBehaviourMocItem.Checked = false;
+                    }
+                    else if (typeItem == monoBehaviourMocItem && monoBehaviourMocItem.Checked)
+                    {
+                        monoBehaviourItem.Checked = false;
+                    }
+                }
             }
             else if (allToolStripMenuItem.Checked)
             {
@@ -329,7 +388,7 @@ namespace AssetStudioGUI
                 if (e.Control)
                 {
                     var need = false;
-                    if (lastSelectedItem?.Type == ClassIDType.Texture2D)
+                    if (lastSelectedItem?.Type == ClassIDType.Texture2D || lastSelectedItem?.Type == ClassIDType.Texture2DArrayImage)
                     {
                         switch (e.KeyCode)
                         {
@@ -421,12 +480,12 @@ namespace AssetStudioGUI
                         {
                             if (enablePreview.Checked && imageTexture != null)
                             {
-                                previewPanel.BackgroundImage = imageTexture.Bitmap;
+                                previewPanel.Image = imageTexture.Bitmap;
                             }
                             else
                             {
-                                previewPanel.BackgroundImage = Properties.Resources.preview;
-                                previewPanel.BackgroundImageLayout = ImageLayout.Center;
+                                previewPanel.Image = Properties.Resources.preview;
+                                previewPanel.SizeMode = PictureBoxSizeMode.CenterImage;
                             }
                         }
                         break;
@@ -624,7 +683,7 @@ namespace AssetStudioGUI
                 enableFiltering = false;
                 listSearch.Text = " Filter ";
                 listSearch.ForeColor = SystemColors.GrayText;
-                listSearch.BackColor = System.Drawing.Color.White;
+                listSearch.BackColor = SystemColors.Window;
             }
         }
 
@@ -679,6 +738,8 @@ namespace AssetStudioGUI
             sortColumn = e.Column;
             assetListView.BeginUpdate();
             assetListView.SelectedIndices.Clear();
+            selectedIndicesPrevList.Clear();
+            selectedAnimationAssetsList.Clear();
             if (sortColumn == 5) //Compressed Size Estimate
             {
                 visibleAssets.Sort((a, b) =>
@@ -730,8 +791,8 @@ namespace AssetStudioGUI
 
         private void selectAsset(object sender, ListViewItemSelectionChangedEventArgs e)
         {
-            previewPanel.BackgroundImage = Properties.Resources.preview;
-            previewPanel.BackgroundImageLayout = ImageLayout.Center;
+            previewPanel.Image = Properties.Resources.preview;
+            previewPanel.SizeMode = PictureBoxSizeMode.CenterImage;
             classTextBox.Visible = false;
             assetInfoLabel.Visible = false;
             assetInfoLabel.Text = null;
@@ -797,7 +858,11 @@ namespace AssetStudioGUI
                 switch (assetItem.Type)
                 {
                     case ClassIDType.Texture2D:
+                    case ClassIDType.Texture2DArrayImage:
                         PreviewTexture2D(assetItem, assetItem.Asset as Texture2D);
+                        break;
+                    case ClassIDType.Texture2DArray:
+                        PreviewTexture2DArray(assetItem, assetItem.Asset as Texture2DArray);
                         break;
                     case ClassIDType.AudioClip:
                         PreviewAudioClip(assetItem, assetItem.Asset as AudioClip);
@@ -809,7 +874,16 @@ namespace AssetStudioGUI
                         PreviewTextAsset(assetItem.Asset as TextAsset);
                         break;
                     case ClassIDType.MonoBehaviour:
-                        PreviewMonoBehaviour(assetItem.Asset as MonoBehaviour);
+                        var m_MonoBehaviour = (MonoBehaviour)assetItem.Asset;
+                        if (m_MonoBehaviour.m_Script.TryGet(out var m_Script))
+                        {
+                            if (m_Script.m_ClassName == "CubismMoc")
+                            {
+                                PreviewMoc(assetItem, m_MonoBehaviour);
+                                break;
+                            }
+                        }
+                        PreviewMonoBehaviour(m_MonoBehaviour);
                         break;
                     case ClassIDType.Font:
                         PreviewFont(assetItem.Asset as Font);
@@ -848,6 +922,16 @@ namespace AssetStudioGUI
             }
         }
 
+        private void PreviewTexture2DArray(AssetItem assetItem, Texture2DArray m_Texture2DArray)
+        {
+            assetItem.InfoText = 
+                $"Width: {m_Texture2DArray.m_Width}\n" +
+                $"Height: {m_Texture2DArray.m_Height}\n" +
+                $"Graphics format: {m_Texture2DArray.m_Format}\n" +
+                $"Texture format: {m_Texture2DArray.m_Format.ToTextureFormat()}\n" +
+                $"Texture count: {m_Texture2DArray.m_Depth}";
+        }
+
         private void PreviewTexture2D(AssetItem assetItem, Texture2D m_Texture2D)
         {
             var image = m_Texture2D.ConvertToImage(true);
@@ -858,9 +942,9 @@ namespace AssetStudioGUI
                 assetItem.InfoText = $"Width: {m_Texture2D.m_Width}\nHeight: {m_Texture2D.m_Height}\nFormat: {m_Texture2D.m_TextureFormat}";
                 switch (m_Texture2D.m_TextureSettings.m_FilterMode)
                 {
-                    case 0: assetItem.InfoText += "\nFilter Mode: Point "; break;
-                    case 1: assetItem.InfoText += "\nFilter Mode: Bilinear "; break;
-                    case 2: assetItem.InfoText += "\nFilter Mode: Trilinear "; break;
+                    case 0: assetItem.InfoText += "\nFilter mode: Point "; break;
+                    case 1: assetItem.InfoText += "\nFilter mode: Bilinear "; break;
+                    case 2: assetItem.InfoText += "\nFilter mode: Trilinear "; break;
                 }
                 assetItem.InfoText += $"\nAnisotropic level: {m_Texture2D.m_TextureSettings.m_Aniso}\nMip map bias: {m_Texture2D.m_TextureSettings.m_MipBias}";
                 switch (m_Texture2D.m_TextureSettings.m_WrapMode)
@@ -896,6 +980,8 @@ namespace AssetStudioGUI
                         }
                     }
                 }
+                var switchSwizzled = m_Texture2D.m_PlatformBlob.Length != 0;
+                assetItem.InfoText += assetItem.Asset.platform == BuildTarget.Switch ? $"\nUses texture swizzling: {switchSwizzled}" : "";
                 PreviewTexture(bitmap);
 
                 StatusStripUpdate("'Ctrl'+'R'/'G'/'B'/'A' for Channel Toggle");
@@ -910,12 +996,12 @@ namespace AssetStudioGUI
         {
             //Info
             assetItem.InfoText = "Compression format: ";
-            if (m_AudioClip.version[0] < 5)
+            if (m_AudioClip.version < 5)
             {
                 switch (m_AudioClip.m_Type)
                 {
-                    case FMODSoundType.ACC:
-                        assetItem.InfoText += "Acc";
+                    case FMODSoundType.AAC:
+                        assetItem.InfoText += "AAC";
                         break;
                     case FMODSoundType.AIFF:
                         assetItem.InfoText += "AIFF";
@@ -998,6 +1084,21 @@ namespace AssetStudioGUI
             var m_AudioData = m_AudioClip.m_AudioData.GetData();
             if (m_AudioData == null || m_AudioData.Length == 0)
                 return;
+
+            if (!m_AudioClip.IsConvertSupport())
+            {
+                if (m_AudioClip.version >= 5)
+                {
+                    assetItem.InfoText += 
+                        $"\nLength: {m_AudioClip.m_Length:0.0##}\n" +
+                        $"Channel count: {m_AudioClip.m_Channels}\n" +
+                        $"Sample rate: {m_AudioClip.m_Frequency}\n" +
+                        $"Bit depth: {m_AudioClip.m_BitsPerSample}";
+                }
+                StatusStripUpdate("Preview is not available for non-fmod sounds. Try to export instead.");
+                return;
+            }
+
             var exinfo = new FMOD.CREATESOUNDEXINFO();
 
             exinfo.cbsize = Marshal.SizeOf(exinfo);
@@ -1020,6 +1121,13 @@ namespace AssetStudioGUI
             result = sound.getLength(out FMODlenms, FMOD.TIMEUNIT.MS);
             if (ERRCHECK(result)) return;
 
+            result = sound.getLoopPoints(out FMODloopstartms, FMOD.TIMEUNIT.MS, out FMODloopendms, FMOD.TIMEUNIT.MS);
+            if (result == FMOD.RESULT.OK)
+            {
+                assetItem.InfoText += $"\nLoop Start: {(FMODloopstartms / 1000 / 60):00}:{(FMODloopstartms / 1000 % 60):00}.{(FMODloopstartms / 10 % 100):00}";
+                assetItem.InfoText += $"\nLoop End: {(FMODloopendms / 1000 / 60):00}:{(FMODloopendms / 1000 % 60):00}.{(FMODloopendms / 10 % 100):00}";
+            }
+            
             _ = system.getMasterChannelGroup(out var channelGroup);
             result = system.playSound(sound, channelGroup, true, out channel);
             if (ERRCHECK(result)) return;
@@ -1068,6 +1176,27 @@ namespace AssetStudioGUI
             }
             var str = JsonConvert.SerializeObject(obj, Formatting.Indented);
             PreviewText(str);
+        }
+
+        private void PreviewMoc(AssetItem assetItem, MonoBehaviour m_MonoBehaviour)
+        {
+            using (var cubismModel = new CubismModel(m_MonoBehaviour))
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine($"SDK Version: {cubismModel.VersionDescription}");
+                if (cubismModel.Version > 0)
+                {
+                    sb.AppendLine($"Canvas Width: {cubismModel.CanvasWidth}");
+                    sb.AppendLine($"Canvas Height: {cubismModel.CanvasHeight}");
+                    sb.AppendLine($"Center X: {cubismModel.CentralPosX}");
+                    sb.AppendLine($"Center Y: {cubismModel.CentralPosY}");
+                    sb.AppendLine($"Pixel Per Unit: {cubismModel.PixelPerUnit}");
+                    sb.AppendLine($"Parameter Count: {cubismModel.ParamCount}");
+                    sb.AppendLine($"Part Count: {cubismModel.PartCount}");
+                }
+                assetItem.InfoText = sb.ToString();
+            }
+            StatusStripUpdate("Can be exported as Live2D Cubism model.");
         }
 
         private void PreviewFont(Font m_Font)
@@ -1295,11 +1424,11 @@ namespace AssetStudioGUI
         {
             imageTexture?.Dispose();
             imageTexture = bitmap;
-            previewPanel.BackgroundImage = imageTexture.Bitmap;
+            previewPanel.Image = imageTexture.Bitmap;
             if (imageTexture.Width > previewPanel.Width || imageTexture.Height > previewPanel.Height)
-                previewPanel.BackgroundImageLayout = ImageLayout.Zoom;
+                previewPanel.SizeMode = PictureBoxSizeMode.Zoom;
             else
-                previewPanel.BackgroundImageLayout = ImageLayout.Center;
+                previewPanel.SizeMode = PictureBoxSizeMode.CenterImage;
         }
 
         private void PreviewText(string text)
@@ -1349,7 +1478,7 @@ namespace AssetStudioGUI
 
         private void ResetForm()
         {
-            Text = $"{Application.ProductName} v{Application.ProductVersion}";
+            Text = guiTitle;
             assetsManager.Clear();
             assemblyLoader.Clear();
             exportableAssets.Clear();
@@ -1359,10 +1488,13 @@ namespace AssetStudioGUI
             assetListView.Items.Clear();
             classesListView.Items.Clear();
             classesListView.Groups.Clear();
-            previewPanel.BackgroundImage = Properties.Resources.preview;
+            selectedAnimationAssetsList.Clear();
+            selectedIndicesPrevList.Clear();
+            cubismMocList.Clear();
+            previewPanel.Image = Properties.Resources.preview;
+            previewPanel.SizeMode = PictureBoxSizeMode.CenterImage;
             imageTexture?.Dispose();
             imageTexture = null;
-            previewPanel.BackgroundImageLayout = ImageLayout.Center;
             assetInfoLabel.Visible = false;
             assetInfoLabel.Text = null;
             textPreviewBox.Visible = false;
@@ -1374,7 +1506,7 @@ namespace AssetStudioGUI
             enableFiltering = false;
             listSearch.Text = " Filter ";
             listSearch.ForeColor = SystemColors.GrayText;
-            listSearch.BackColor = System.Drawing.Color.White;
+            listSearch.BackColor = SystemColors.Window;
             if (tabControl1.SelectedIndex == 1)
                 assetListView.Select();
 
@@ -1402,7 +1534,11 @@ namespace AssetStudioGUI
             {
                 goToSceneHierarchyToolStripMenuItem.Visible = false;
                 showOriginalFileToolStripMenuItem.Visible = false;
-                exportAnimatorwithselectedAnimationClipMenuItem.Visible = false;
+                exportAnimatorWithSelectedAnimationClipMenuItem.Visible = false;
+                exportAsLive2DModelToolStripMenuItem.Visible = false;
+                exportL2DWithFadeLstToolStripMenuItem.Visible = false;
+                exportL2DWithFadeToolStripMenuItem.Visible = false;
+                exportL2DWithClipsToolStripMenuItem.Visible = false;
 
                 if (assetListView.SelectedIndices.Count == 1)
                 {
@@ -1412,10 +1548,42 @@ namespace AssetStudioGUI
                 if (assetListView.SelectedIndices.Count >= 1)
                 {
                     var selectedAssets = GetSelectedAssets();
-                    if (selectedAssets.Any(x => x.Type == ClassIDType.Animator) && selectedAssets.Any(x => x.Type == ClassIDType.AnimationClip))
+
+                    var selectedTypes = (SelectedAssetType)0;
+                    foreach (var asset in selectedAssets)
                     {
-                        exportAnimatorwithselectedAnimationClipMenuItem.Visible = true;
+                        switch (asset.Asset)
+                        {
+                            case MonoBehaviour m_MonoBehaviour:
+                                if (Studio.cubismMocList.Count > 0 && m_MonoBehaviour.m_Script.TryGet(out var m_Script))
+                                {
+                                    if (m_Script.m_ClassName == "CubismMoc")
+                                    {
+                                        selectedTypes |= SelectedAssetType.MonoBehaviourMoc;
+                                    }
+                                    else if (m_Script.m_ClassName == "CubismFadeMotionData")
+                                    {
+                                        selectedTypes |= SelectedAssetType.MonoBehaviourFade;
+                                    }
+                                    else if (m_Script.m_ClassName == "CubismFadeMotionList")
+                                    {
+                                        selectedTypes |= SelectedAssetType.MonoBehaviourFadeLst;
+                                    }
+                                }
+                                break;
+                            case AnimationClip _:
+                                selectedTypes |= SelectedAssetType.AnimationClip;
+                                break;
+                            case Animator _:
+                                selectedTypes |= SelectedAssetType.Animator;
+                                break;
+                        }
                     }
+                    exportAnimatorWithSelectedAnimationClipMenuItem.Visible = (selectedTypes & SelectedAssetType.Animator) !=0 && (selectedTypes & SelectedAssetType.AnimationClip) != 0;
+                    exportAsLive2DModelToolStripMenuItem.Visible = (selectedTypes & SelectedAssetType.MonoBehaviourMoc) != 0;
+                    exportL2DWithFadeLstToolStripMenuItem.Visible = (selectedTypes & SelectedAssetType.MonoBehaviourMoc) !=0 && (selectedTypes & SelectedAssetType.MonoBehaviourFadeLst) != 0;
+                    exportL2DWithFadeToolStripMenuItem.Visible = (selectedTypes & SelectedAssetType.MonoBehaviourMoc) != 0 && (selectedTypes & SelectedAssetType.MonoBehaviourFade) !=0;
+                    exportL2DWithClipsToolStripMenuItem.Visible = (selectedTypes & SelectedAssetType.MonoBehaviourMoc) !=0 && (selectedTypes & SelectedAssetType.AnimationClip) != 0;
                 }
 
                 var selectedElement = assetListView.HitTest(new Point(e.X, e.Y));
@@ -1443,26 +1611,21 @@ namespace AssetStudioGUI
 
         private void showOriginalFileToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            var selectasset = (AssetItem)assetListView.Items[assetListView.SelectedIndices[0]];
-            var args = $"/select, \"{selectasset.SourceFile.originalPath ?? selectasset.SourceFile.fullName}\"";
+            var selectAsset = (AssetItem)assetListView.Items[assetListView.SelectedIndices[0]];
+            var args = $"/select, \"{selectAsset.SourceFile.originalPath ?? selectAsset.SourceFile.fullName}\"";
             var pfi = new ProcessStartInfo("explorer.exe", args);
             Process.Start(pfi);
         }
 
-        private void exportAnimatorwithAnimationClipMenuItem_Click(object sender, EventArgs e)
+        private void exportAnimatorWithAnimationClipMenuItem_Click(object sender, EventArgs e)
         {
             AssetItem animator = null;
-            List<AssetItem> animationList = new List<AssetItem>();
             var selectedAssets = GetSelectedAssets();
             foreach (var assetPreloadData in selectedAssets)
             {
                 if (assetPreloadData.Type == ClassIDType.Animator)
                 {
                     animator = assetPreloadData;
-                }
-                else if (assetPreloadData.Type == ClassIDType.AnimationClip)
-                {
-                    animationList.Add(assetPreloadData);
                 }
             }
 
@@ -1474,7 +1637,7 @@ namespace AssetStudioGUI
                 {
                     saveDirectoryBackup = saveFolderDialog.Folder;
                     var exportPath = Path.Combine(saveFolderDialog.Folder, "Animator") + Path.DirectorySeparatorChar;
-                    ExportAnimatorWithAnimationClip(animator, animationList, exportPath);
+                    ExportAnimatorWithAnimationClip(animator, selectedAnimationAssetsList, exportPath);
                 }
             }
         }
@@ -1484,7 +1647,7 @@ namespace AssetStudioGUI
             ExportObjects(false);
         }
 
-        private void exportObjectswithAnimationClipMenuItem_Click(object sender, EventArgs e)
+        private void exportObjectsWithAnimationClipMenuItem_Click(object sender, EventArgs e)
         {
             ExportObjects(true);
         }
@@ -1517,12 +1680,12 @@ namespace AssetStudioGUI
             }
         }
 
-        private void exportSelectedObjectsmergeToolStripMenuItem_Click(object sender, EventArgs e)
+        private void exportSelectedObjectsMergeToolStripMenuItem_Click(object sender, EventArgs e)
         {
             ExportMergeObjects(false);
         }
 
-        private void exportSelectedObjectsmergeWithAnimationClipToolStripMenuItem_Click(object sender, EventArgs e)
+        private void exportSelectedObjectsMergeWithAnimationClipToolStripMenuItem_Click(object sender, EventArgs e)
         {
             ExportMergeObjects(true);
         }
@@ -1565,10 +1728,10 @@ namespace AssetStudioGUI
 
         private void goToSceneHierarchyToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            var selectasset = (AssetItem)assetListView.Items[assetListView.SelectedIndices[0]];
-            if (selectasset.TreeNode != null)
+            var selectAsset = (AssetItem)assetListView.Items[assetListView.SelectedIndices[0]];
+            if (selectAsset.TreeNode != null)
             {
-                sceneTreeView.SelectedNode = selectasset.TreeNode;
+                sceneTreeView.SelectedNode = selectAsset.TreeNode;
                 tabControl1.SelectedTab = tabPage1;
             }
         }
@@ -1633,7 +1796,7 @@ namespace AssetStudioGUI
             ExportAssetsList(ExportFilter.Filtered);
         }
 
-        private void exportAllObjectssplitToolStripMenuItem1_Click(object sender, EventArgs e)
+        private void exportAllObjectsSplitToolStripMenuItem1_Click(object sender, EventArgs e)
         {
             if (sceneTreeView.Nodes.Count > 0)
             {
@@ -1654,18 +1817,44 @@ namespace AssetStudioGUI
 
         private void assetListView_SelectedIndexChanged(object sender, EventArgs e)
         {
-            selectionChanged();
+            ProcessSelectedItems();
         }
 
         private void assetListView_VirtualItemsSelectionRangeChanged(object sender, ListViewVirtualItemsSelectionRangeChangedEventArgs e)
         {
-            selectionChanged();
+            ProcessSelectedItems();
         }
 
-        void selectionChanged() {
-            if (assetListView.SelectedIndices.Count > 1) {
+        private void ProcessSelectedItems()
+        {
+            if (assetListView.SelectedIndices.Count > 1)
+            {
                 var compressedSize = GetSelectedAssets().Sum(x => x.Asset.compressedSizeEstimate);
                 StatusStripUpdate($"Selected {assetListView.SelectedIndices.Count} assets. Compressed size: {compressedSize} bytes");
+            }
+
+            var selectedIndicesList = assetListView.SelectedIndices.Cast<int>().ToList();
+
+            var addedIndices = selectedIndicesList.Except(selectedIndicesPrevList).ToArray();
+            foreach (var itemIndex in addedIndices)
+            {
+                selectedIndicesPrevList.Add(itemIndex);
+                var selectedItem = (AssetItem)assetListView.Items[itemIndex];
+                if (selectedItem.Type == ClassIDType.AnimationClip)
+                {
+                    selectedAnimationAssetsList.Add(selectedItem);
+                }
+            }
+
+            var removedIndices = selectedIndicesPrevList.Except(selectedIndicesList).ToArray();
+            foreach (var itemIndex in removedIndices)
+            {
+                selectedIndicesPrevList.Remove(itemIndex);
+                var unselectedItem = (AssetItem)assetListView.Items[itemIndex];
+                if (unselectedItem.Type == ClassIDType.AnimationClip)
+                {
+                    selectedAnimationAssetsList.Remove(unselectedItem);
+                }
             }
         }
 
@@ -1688,6 +1877,7 @@ namespace AssetStudioGUI
             assetListView.BeginUpdate();
             assetListView.SelectedIndices.Clear();
             var show = new List<ClassIDType>();
+            var filterMoc = false;
             if (!allToolStripMenuItem.Checked)
             {
                 for (var i = 1; i < filterTypeToolStripMenuItem.DropDownItems.Count; i++)
@@ -1695,10 +1885,15 @@ namespace AssetStudioGUI
                     var item = (ToolStripMenuItem)filterTypeToolStripMenuItem.DropDownItems[i];
                     if (item.Checked)
                     {
-                        show.Add((ClassIDType)Enum.Parse(typeof(ClassIDType), item.Text));
+                        if (item.Name == "MonoBehaviour (Live2D Model)")
+                            filterMoc = true;
+                        else
+                            show.Add((ClassIDType)Enum.Parse(typeof(ClassIDType), item.Text));
                     }
                 }
-                visibleAssets = exportableAssets.FindAll(x => show.Contains(x.Type));
+                visibleAssets = filterMoc
+                    ? exportableAssets.FindAll(x => cubismMocList.Contains(x.Asset) || show.Contains(x.Type))
+                    : exportableAssets.FindAll(x => show.Contains(x.Type));
             }
             else
             {
@@ -1710,16 +1905,16 @@ namespace AssetStudioGUI
                 switch (mode)
                 {
                     case ListSearchFilterMode.Include:
-                        visibleAssets = visibleAssets.FindAll(
-                            x => x.Text.IndexOf(listSearch.Text, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            x.SubItems[1].Text.IndexOf(listSearch.Text, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            x.SubItems[3].Text.IndexOf(listSearch.Text, StringComparison.OrdinalIgnoreCase) >= 0);
+                        visibleAssets = visibleAssets.FindAll(x =>
+                            x.Text.IndexOf(listSearch.Text, StringComparison.OrdinalIgnoreCase) >= 0
+                            || x.SubItems[1].Text.IndexOf(listSearch.Text, StringComparison.OrdinalIgnoreCase) >= 0
+                            || x.SubItems[3].Text.IndexOf(listSearch.Text, StringComparison.OrdinalIgnoreCase) >= 0);
                         break;
                     case ListSearchFilterMode.Exclude:
-                        visibleAssets = visibleAssets.FindAll(
-                            x => x.Text.IndexOf(listSearch.Text, StringComparison.OrdinalIgnoreCase) <= 0 &&
-                            x.SubItems[1].Text.IndexOf(listSearch.Text, StringComparison.OrdinalIgnoreCase) <= 0 &&
-                            x.SubItems[3].Text.IndexOf(listSearch.Text, StringComparison.OrdinalIgnoreCase) <= 0);
+                        visibleAssets = visibleAssets.FindAll(x =>
+                            x.Text.IndexOf(listSearch.Text, StringComparison.OrdinalIgnoreCase) <= 0
+                            && x.SubItems[1].Text.IndexOf(listSearch.Text, StringComparison.OrdinalIgnoreCase) <= 0
+                            && x.SubItems[3].Text.IndexOf(listSearch.Text, StringComparison.OrdinalIgnoreCase) <= 0);
                         break;
                     case ListSearchFilterMode.RegexName:
                     case ListSearchFilterMode.RegexContainer:
@@ -1736,16 +1931,16 @@ namespace AssetStudioGUI
                             {
                                 visibleAssets = visibleAssets.FindAll(x => Regex.IsMatch(x.SubItems[1].Text, pattern, regexOptions));
                             }
-                            listSearch.BackColor = System.Drawing.Color.PaleGreen;
+                            listSearch.BackColor = SystemInformation.HighContrast ? listSearch.BackColor : System.Drawing.Color.PaleGreen;
                         }
                         catch (ArgumentException e)
                         {
-                            listSearch.BackColor = System.Drawing.Color.FromArgb(255, 160, 160);
+                            listSearch.BackColor = SystemInformation.HighContrast ? listSearch.BackColor : System.Drawing.Color.FromArgb(255, 160, 160);
                             StatusStripUpdate($"Regex error: {e.Message}");
                         }
                         catch (RegexMatchTimeoutException)
                         {
-                            listSearch.BackColor = System.Drawing.Color.FromArgb(255, 160, 160);
+                            listSearch.BackColor = SystemInformation.HighContrast ? listSearch.BackColor : System.Drawing.Color.FromArgb(255, 160, 160);
                             StatusStripUpdate($"Timeout error");
                         }
                         break;
@@ -1777,6 +1972,18 @@ namespace AssetStudioGUI
                         case ExportFilter.Filtered:
                             toExportAssets = visibleAssets;
                             break;
+                    }
+
+                    if (toExportAssets != null && filterTypeToolStripMenuItem.DropDownItems.ContainsKey("Texture2DArray"))
+                    {
+                        var tex2dArrayImgPathIdSet = toExportAssets.FindAll(x => x.Type == ClassIDType.Texture2DArrayImage).Select(x => x.m_PathID).ToHashSet();
+                        foreach (var pathId in tex2dArrayImgPathIdSet)
+                        {
+                            toExportAssets = toExportAssets.Where(x => 
+                                x.Type != ClassIDType.Texture2DArray 
+                                || (x.Type == ClassIDType.Texture2DArray && x.m_PathID != pathId))
+                                .ToList();
+                        }
                     }
                     Studio.ExportAssets(saveFolderDialog.Folder, toExportAssets, exportType);
                 }
@@ -1823,7 +2030,7 @@ namespace AssetStudioGUI
 
         private void toolStripMenuItem15_Click(object sender, EventArgs e)
         {
-            logger.ShowErrorMessage = toolStripMenuItem15.Checked;
+            GUILogger.ShowDebugMessage = toolStripMenuItem15.Checked;
         }
 
         private void sceneTreeView_NodeMouseClick(object sender, TreeNodeMouseClickEventArgs e)
@@ -1846,7 +2053,7 @@ namespace AssetStudioGUI
         private void clearSelectionToolStripMenuItem_Click(object sender, EventArgs e)
         {
             treeRecursionEnabled = false;
-            for(var i = 0; i < treeNodeSelectedList.Count; i++)
+            for (var i = 0; i < treeNodeSelectedList.Count; i++)
             {
                 treeNodeSelectedList[i].Checked = false;
             }
@@ -1889,7 +2096,7 @@ namespace AssetStudioGUI
 
         private void listSearchFilterMode_SelectedIndexChanged(object sender, EventArgs e)
         {
-            listSearch.BackColor = System.Drawing.Color.White;
+            listSearch.BackColor = SystemColors.Window;
             if (listSearch.Text != " Filter ")
             {
                 FilterAssetList();
@@ -1901,42 +2108,6 @@ namespace AssetStudioGUI
             listSearch.Text = listSearchHistory.Text;
             listSearch.Focus();
             listSearch.SelectionStart = listSearch.Text.Length;
-        }
-
-        private void allLive2DModelsToolStripMenuItem_Click(object sender, EventArgs e)
-        {
-            if (exportableAssets.Count > 0)
-            {
-                var cubismMocs = exportableAssets.Where(x =>
-                {
-                    if (x.Type == ClassIDType.MonoBehaviour)
-                    {
-                        ((MonoBehaviour)x.Asset).m_Script.TryGet(out var m_Script);
-                        return m_Script?.m_ClassName == "CubismMoc";
-                    }
-                    return false;
-                }).Select(x => x.Asset).ToArray();
-                if (cubismMocs.Length == 0)
-                {
-                    Logger.Info("Live2D Cubism models were not found.");
-                    return;
-                }
-
-                var saveFolderDialog = new OpenFolderDialog();
-                saveFolderDialog.InitialFolder = saveDirectoryBackup;
-                if (saveFolderDialog.ShowDialog(this) == DialogResult.OK)
-                {
-                    timer.Stop();
-                    saveDirectoryBackup = saveFolderDialog.Folder;
-                    Progress.Reset();
-                    BeginInvoke(new Action(() => { progressBar1.Style = ProgressBarStyle.Marquee; }));
-                    Studio.ExportLive2D(cubismMocs, saveFolderDialog.Folder);
-                }
-            }
-            else
-            {
-                Logger.Info("No exportable assets loaded");
-            }
         }
 
         private void selectRelatedAsset(object sender, EventArgs e)
@@ -2010,6 +2181,190 @@ namespace AssetStudioGUI
             }
         }
 
+        private void showConsoleToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var showConsole = showConsoleToolStripMenuItem.Checked;
+            if (showConsole)
+                ConsoleWindow.ShowConsoleWindow();
+            else
+                ConsoleWindow.HideConsoleWindow();
+
+            Properties.Settings.Default.showConsole = showConsole;
+            Properties.Settings.Default.Save();
+        }
+
+        private void writeLogToFileToolStripMenuItem_CheckedChanged(object sender, EventArgs e)
+        {
+            var useFileLogger = writeLogToFileToolStripMenuItem.Checked;
+            logger.UseFileLogger = useFileLogger;
+
+            Properties.Settings.Default.useFileLogger = useFileLogger;
+            Properties.Settings.Default.Save();
+        }
+
+        private void AssetStudioGUIForm_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            Logger.Verbose("Closing AssetStudio");
+        }
+
+        private void buildTreeStructureToolStripMenuItem_CheckedChanged(object sender, EventArgs e)
+        {
+            Properties.Settings.Default.buildTreeStructure = buildTreeStructureToolStripMenuItem.Checked;
+            Properties.Settings.Default.Save();
+        }
+
+        private void exportAllL2D_Click(object sender, EventArgs e)
+        {
+            if (exportableAssets.Count > 0)
+            {
+                if (Studio.cubismMocList.Count == 0)
+                {
+                    Logger.Info("Live2D Cubism models were not found.");
+                    return;
+                }
+                Live2DExporter();
+            }
+            else
+            {
+                Logger.Info("No exportable assets loaded");
+            }
+        }
+
+        private void exportSelectedL2D_Click(object sender, EventArgs e)
+        {
+            ExportSelectedL2DModels(ExportL2DFilter.Selected);
+        }
+
+        private void exportSelectedL2DWithClips_Click(object sender, EventArgs e)
+        {
+            ExportSelectedL2DModels(ExportL2DFilter.SelectedWithClips);
+        }
+
+        private void exportSelectedL2DWithFadeMotions_Click(object sender, EventArgs e)
+        {
+            ExportSelectedL2DModels(ExportL2DFilter.SelectedWithFade);
+        }
+
+        private void exportSelectedL2DWithFadeList_Click(object sender, EventArgs e)
+        {
+            ExportSelectedL2DModels(ExportL2DFilter.SelectedWithFadeList);
+        }
+
+        private void ExportSelectedL2DModels(ExportL2DFilter l2dExportMode)
+        {
+            if (exportableAssets.Count == 0)
+            {
+                Logger.Info("No exportable assets loaded");
+                return;
+            }
+            if (Studio.cubismMocList.Count == 0)
+            {
+                Logger.Info("Live2D Cubism models were not found.");
+                return;
+            }
+            var selectedAssets = GetSelectedAssets();
+            if (selectedAssets.Count == 0)
+                return;
+
+            MonoBehaviour selectedFadeLst = null;
+            var selectedMocs = new List<MonoBehaviour>();
+            var selectedFadeMotions = new List<MonoBehaviour>();
+            var selectedClips = new List<AnimationClip>();
+            foreach (var assetItem in selectedAssets)
+            {
+                if (assetItem.Asset is MonoBehaviour m_MonoBehaviour && m_MonoBehaviour.m_Script.TryGet(out var m_Script))
+                {
+                    if (m_Script.m_ClassName == "CubismMoc")
+                    {
+                        selectedMocs.Add(m_MonoBehaviour);
+                    }
+                    else if (m_Script.m_ClassName == "CubismFadeMotionData")
+                    {
+                        selectedFadeMotions.Add(m_MonoBehaviour);
+                    }
+                    else if (m_Script.m_ClassName == "CubismFadeMotionList")
+                    {
+                        selectedFadeLst = m_MonoBehaviour;
+                    }
+                }
+                else if (assetItem.Asset is AnimationClip m_AnimationClip)
+                {
+                    selectedClips.Add(m_AnimationClip);
+                }
+            }
+            if (selectedMocs.Count == 0)
+            {
+                Logger.Info("Live2D Cubism models were not selected.");
+                return;
+            }
+
+            switch (l2dExportMode)
+            {
+                case ExportL2DFilter.Selected:
+                    Live2DExporter(selectedMocs);
+                    break;
+                case ExportL2DFilter.SelectedWithFadeList:
+                    if (selectedFadeLst == null)
+                    {
+                        Logger.Info("Fade Motion List was not selected.");
+                        return;
+                    }
+                    Live2DExporter(selectedMocs, selFadeLst: selectedFadeLst);
+                    break;
+                case ExportL2DFilter.SelectedWithFade:
+                    if (selectedFadeMotions.Count == 0)
+                    {
+                        Logger.Info("No Fade motions were selected.");
+                        return;
+                    }
+                    Live2DExporter(selectedMocs, selFadeMotions: selectedFadeMotions);
+                    break;
+                case ExportL2DFilter.SelectedWithClips:
+                    if (selectedClips.Count == 0)
+                    {
+                        Logger.Info("No AnimationClips were selected.");
+                        return;
+                    }
+                    Live2DExporter(selectedMocs, selectedClips);
+                    break;
+            }
+        }
+
+        private void Live2DExporter(List<MonoBehaviour> selMocs = null, List<AnimationClip> selClipMotions = null, List<MonoBehaviour> selFadeMotions = null, MonoBehaviour selFadeLst = null)
+        {
+            var saveFolderDialog = new OpenFolderDialog();
+            saveFolderDialog.InitialFolder = saveDirectoryBackup;
+            if (saveFolderDialog.ShowDialog(this) == DialogResult.OK)
+            {
+                timer.Stop();
+                saveDirectoryBackup = saveFolderDialog.Folder;
+                Progress.Reset();
+                BeginInvoke(new Action(() => { progressBar1.Style = ProgressBarStyle.Marquee; }));
+
+                Studio.ExportLive2D(saveFolderDialog.Folder, selMocs, selClipMotions, selFadeMotions, selFadeLst);
+            }
+        }
+
+        private void customCompressionZstd_CheckedChanged(object sender, EventArgs e)
+        {
+            customCompressionLZ4ToolStripMenuItem.Checked = !customCompressionZstdToolStripMenuItem.Checked;
+            assetsManager.ZstdEnabled = customCompressionZstdToolStripMenuItem.Checked;
+        }
+
+        private void customCompressionLZ4_CheckedChanged(object sender, EventArgs e)
+        {
+            customCompressionZstdToolStripMenuItem.Checked = !customCompressionLZ4ToolStripMenuItem.Checked;
+            assetsManager.ZstdEnabled = customCompressionZstdToolStripMenuItem.Checked;
+        }
+
+        private void useAssetLoadingViaTypetreeToolStripMenuItem_CheckedChanged(object sender, EventArgs e)
+        {
+            var isEnabled = useAssetLoadingViaTypetreeToolStripMenuItem.Checked;
+            assetsManager.LoadingViaTypeTreeEnabled = isEnabled;
+            Properties.Settings.Default.useTypetreeLoading = isEnabled;
+            Properties.Settings.Default.Save();
+        }
+
         #region FMOD
         private void FMODinit()
         {
@@ -2022,7 +2377,7 @@ namespace AssetStudioGUI
             ERRCHECK(result);
             if (version < FMOD.VERSION.number)
             {
-                Logger.Error($"Error!  You are using an old version of FMOD {version:X}.  This program requires {FMOD.VERSION.number:X}.");
+                Logger.Error($"Error! You are using an old version of FMOD {version:X}. This program requires {FMOD.VERSION.number:X}.");
                 Application.Exit();
             }
 

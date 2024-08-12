@@ -1,13 +1,16 @@
 ﻿using AssetStudio;
 using AssetStudioCLI.Options;
+using CubismLive2DExtractor;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Xml.Linq;
 using static AssetStudioCLI.Exporter;
-using static CubismLive2DExtractor.Live2DExtractor;
-using Ansi = AssetStudioCLI.CLIAnsiColors;
+using Ansi = AssetStudio.ColorConsole;
 
 namespace AssetStudioCLI
 {
@@ -17,10 +20,12 @@ namespace AssetStudioCLI
         public static List<AssetItem> parsedAssetsList = new List<AssetItem>();
         public static List<BaseNode> gameObjectTree = new List<BaseNode>();
         public static AssemblyLoader assemblyLoader = new AssemblyLoader();
+        public static List<MonoBehaviour> cubismMocList = new List<MonoBehaviour>();
         private static Dictionary<AssetStudio.Object, string> containers = new Dictionary<AssetStudio.Object, string>();
 
         static Studio()
         {
+            Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("en-US");
             Progress.Default = new Progress<int>(ShowCurProgressValue);
         }
 
@@ -33,6 +38,8 @@ namespace AssetStudioCLI
         {
             var isLoaded = false;
             assetsManager.SpecifyUnityVersion = CLIOptions.o_unityVersion.Value;
+            assetsManager.ZstdEnabled = CLIOptions.o_customCompressionType.Value == CustomCompressionType.Zstd;
+            assetsManager.LoadingViaTypeTreeEnabled = !CLIOptions.f_avoidLoadingViaTypetree.Value;
             if (!CLIOptions.f_loadAllAssets.Value)
             {
                 assetsManager.SetAssetFilter(CLIOptions.o_exportAssetTypes.Value);
@@ -55,6 +62,7 @@ namespace AssetStudioCLI
             Logger.Info("Parse assets...");
 
             var fileAssetsList = new List<AssetItem>();
+            var tex2dArrayAssetList = new List<AssetItem>();
             var objectCount = assetsManager.assetsFileList.Sum(x => x.Objects.Count);
             var objectAssetItemDic = new Dictionary<AssetStudio.Object, AssetItem>(objectCount);
 
@@ -62,6 +70,7 @@ namespace AssetStudioCLI
             var i = 0;
             foreach (var assetsFile in assetsManager.assetsFileList)
             {
+                var preloadTable = Array.Empty<PPtr<AssetStudio.Object>>();
                 foreach (var asset in assetsFile.Objects)
                 {
                     var assetItem = new AssetItem(asset);
@@ -70,22 +79,31 @@ namespace AssetStudioCLI
                     var isExportable = false;
                     switch (asset)
                     {
+                        case PreloadData m_PreloadData:
+                            preloadTable = m_PreloadData.m_Assets;
+                            break;
                         case AssetBundle m_AssetBundle:
+                            var isStreamedSceneAssetBundle = m_AssetBundle.m_IsStreamedSceneAssetBundle;
+                            if (!isStreamedSceneAssetBundle)
+                            {
+                                preloadTable = m_AssetBundle.m_PreloadTable;
+                            }
+                            assetItem.Text = string.IsNullOrEmpty(m_AssetBundle.m_AssetBundleName) ? m_AssetBundle.m_Name : m_AssetBundle.m_AssetBundleName;
+
                             foreach (var m_Container in m_AssetBundle.m_Container)
                             {
                                 var preloadIndex = m_Container.Value.preloadIndex;
-                                var preloadSize = m_Container.Value.preloadSize;
+                                var preloadSize = isStreamedSceneAssetBundle ? preloadTable.Length : m_Container.Value.preloadSize;
                                 var preloadEnd = preloadIndex + preloadSize;
-                                for (int k = preloadIndex; k < preloadEnd; k++)
+                                for (var k = preloadIndex; k < preloadEnd; k++)
                                 {
-                                    var pptr = m_AssetBundle.m_PreloadTable[k];
+                                    var pptr = preloadTable[k];
                                     if (pptr.TryGet(out var obj))
                                     {
                                         containers[obj] = m_Container.Key;
                                     }
                                 }
                             }
-                            assetItem.Text = m_AssetBundle.m_Name;
                             break;
                         case ResourceManager m_ResourceManager:
                             foreach (var m_Container in m_ResourceManager.m_Container)
@@ -101,6 +119,12 @@ namespace AssetStudioCLI
                                 assetItem.FullSize = asset.byteSize + m_Texture2D.m_StreamData.size;
                             assetItem.Text = m_Texture2D.m_Name;
                             break;
+                        case Texture2DArray m_Texture2DArray:
+                            if (!string.IsNullOrEmpty(m_Texture2DArray.m_StreamData?.path))
+                                assetItem.FullSize = asset.byteSize + m_Texture2DArray.m_StreamData.size;
+                            assetItem.Text = m_Texture2DArray.m_Name;
+                            tex2dArrayAssetList.Add(assetItem);
+                            break;
                         case AudioClip m_AudioClip:
                             if (!string.IsNullOrEmpty(m_AudioClip.m_Source))
                                 assetItem.FullSize = asset.byteSize + m_AudioClip.m_Size;
@@ -110,19 +134,21 @@ namespace AssetStudioCLI
                             if (!string.IsNullOrEmpty(m_VideoClip.m_OriginalPath))
                                 assetItem.FullSize = asset.byteSize + m_VideoClip.m_ExternalResources.m_Size;
                             assetItem.Text = m_VideoClip.m_Name;
-                            break;                        
+                            break;
                         case Shader m_Shader:
                             assetItem.Text = m_Shader.m_ParsedForm?.m_Name ?? m_Shader.m_Name;
                             break;
                         case MonoBehaviour m_MonoBehaviour:
-                            if (m_MonoBehaviour.m_Name == "" && m_MonoBehaviour.m_Script.TryGet(out var m_Script))
+                            var assetName = m_MonoBehaviour.m_Name;
+                            if (m_MonoBehaviour.m_Script.TryGet(out var m_Script))
                             {
-                                assetItem.Text = m_Script.m_ClassName;
+                                assetName = assetName == "" ? m_Script.m_ClassName : assetName;
+                                if (m_Script.m_ClassName == "CubismMoc")
+                                {
+                                    cubismMocList.Add(m_MonoBehaviour);
+                                }
                             }
-                            else
-                            {
-                                assetItem.Text = m_MonoBehaviour.m_Name;
-                            }
+                            assetItem.Text = assetName;
                             break;
                         case GameObject m_GameObject:
                             assetItem.Text = m_GameObject.m_Name;
@@ -152,20 +178,30 @@ namespace AssetStudioCLI
                 }
                 foreach (var asset in fileAssetsList)
                 {
-                    if (containers.ContainsKey(asset.Asset))
+                    if (containers.TryGetValue(asset.Asset, out var container))
                     {
-                        asset.Container = containers[asset.Asset];
+                        asset.Container = container;
+                    }
+                }
+                foreach (var tex2dAssetItem in tex2dArrayAssetList)
+                {
+                    var m_Texture2DArray = (Texture2DArray)tex2dAssetItem.Asset;
+                    for (var layer = 0; layer < m_Texture2DArray.m_Depth; layer++)
+                    {
+                        var fakeObj = new Texture2D(m_Texture2DArray, layer);
+                        m_Texture2DArray.TextureList.Add(fakeObj);
                     }
                 }
                 parsedAssetsList.AddRange(fileAssetsList);
                 fileAssetsList.Clear();
-                if (CLIOptions.o_workMode.Value != WorkMode.ExportLive2D)
+                tex2dArrayAssetList.Clear();
+                if (CLIOptions.o_workMode.Value != WorkMode.Live2D)
                 {
                     containers.Clear();
                 }
             }
 
-            if (CLIOptions.o_workMode.Value == WorkMode.SplitObjects)
+            if (CLIOptions.o_workMode.Value == WorkMode.SplitObjects || CLIOptions.o_groupAssetsBy.Value == AssetGroupOption.SceneHierarchy)
             {
                 BuildTreeStructure(objectAssetItemDic);
             }
@@ -173,7 +209,7 @@ namespace AssetStudioCLI
             var log = $"Finished loading {assetsManager.assetsFileList.Count} files with {parsedAssetsList.Count} exportable assets";
             var unityVer = assetsManager.assetsFileList[0].version;
             long m_ObjectsCount;
-            if (unityVer[0] > 2020)
+            if (unityVer > 2020)
             {
                 m_ObjectsCount = assetsManager.assetsFileList.Sum(x => x.m_Objects.LongCount(y =>
                     y.classID != (int)ClassIDType.Shader
@@ -202,7 +238,7 @@ namespace AssetStudioCLI
             Progress.Reset();
             foreach (var assetsFile in assetsManager.assetsFileList)
             {
-                var fileNode = new BaseNode();  //RootNode
+                var fileNode = new BaseNode(assetsFile.fileName);  //RootNode
 
                 foreach (var obj in assetsFile.Objects)
                 {
@@ -237,7 +273,6 @@ namespace AssetStudioCLI
                         }
 
                         var parentNode = fileNode;
-
                         if (m_GameObject.m_Transform != null)
                         {
                             if (m_GameObject.m_Transform.m_Father.TryGet(out var m_Father))
@@ -253,14 +288,13 @@ namespace AssetStudioCLI
                                 }
                             }
                         }
-
                         parentNode.nodes.Add(currentNode);
-
                     }
                 }
 
                 if (fileNode.nodes.Count > 0)
                 {
+                    GenerateFullPath(fileNode, fileNode.Text);
                     gameObjectTree.Add(fileNode);
                 }
 
@@ -269,6 +303,22 @@ namespace AssetStudioCLI
 
             treeNodeDictionary.Clear();
             objectAssetItemDic.Clear();
+        }
+
+        private static void GenerateFullPath(BaseNode treeNode, string path)
+        {
+            treeNode.FullPath = path;
+            foreach (var node in treeNode.nodes)
+            {
+                if (node.nodes.Count > 0)
+                {
+                    GenerateFullPath(node, Path.Combine(path, node.Text));
+                }
+                else
+                {
+                    node.FullPath = Path.Combine(path, node.Text);
+                }
+            }
         }
 
         public static void ShowExportableAssetsInfo()
@@ -318,7 +368,7 @@ namespace AssetStudioCLI
         {
             switch (CLIOptions.o_workMode.Value)
             {
-                case WorkMode.ExportLive2D:
+                case WorkMode.Live2D:
                 case WorkMode.SplitObjects:
                     break;
                 default:
@@ -388,7 +438,10 @@ namespace AssetStudioCLI
             var exportedCount = 0;
 
             var groupOption = CLIOptions.o_groupAssetsBy.Value;
-            foreach (var asset in parsedAssetsList)
+            var parallelExportCount = CLIOptions.o_maxParallelExportTasks.Value;
+            var toExportAssetDict = new ConcurrentDictionary<AssetItem, string>();
+            var toParallelExportAssetDict = new ConcurrentDictionary<AssetItem, string>();
+            Parallel.ForEach(parsedAssetsList, asset =>
             {
                 string exportPath;
                 switch (groupOption)
@@ -421,36 +474,75 @@ namespace AssetStudioCLI
                             exportPath = Path.Combine(savePath, Path.GetFileName(asset.SourceFile.originalPath) + "_export", asset.SourceFile.fileName);
                         }
                         break;
+                    case AssetGroupOption.SceneHierarchy:
+                        if (asset.Node != null)
+                        {
+                            exportPath = Path.Combine(savePath, asset.Node.FullPath);
+                        }
+                        else
+                        {
+                            exportPath = Path.Combine(savePath, "_sceneRoot", asset.TypeString);
+                        }
+                        break;
                     default:
                         exportPath = savePath;
                         break;
                 }
-
                 exportPath += Path.DirectorySeparatorChar;
+
+                if (CLIOptions.o_workMode.Value == WorkMode.Export)
+                {
+                    switch (asset.Type)
+                    {
+                        case ClassIDType.Texture2D:
+                        case ClassIDType.Sprite:
+                        case ClassIDType.AudioClip:
+                            toParallelExportAssetDict.TryAdd(asset, exportPath);
+                            break;
+                        case ClassIDType.Texture2DArray:
+                            var m_Texture2DArray = (Texture2DArray)asset.Asset;
+                            toExportCount += m_Texture2DArray.TextureList.Count - 1;
+                            foreach (var texture in m_Texture2DArray.TextureList)
+                            {
+                                var fakeItem = new AssetItem(texture)
+                                {
+                                    Text = texture.m_Name,
+                                    Container = asset.Container,
+                                };
+                                toParallelExportAssetDict.TryAdd(fakeItem, exportPath);
+                            }
+                            break;
+                        default:
+                            toExportAssetDict.TryAdd(asset, exportPath);
+                            break;
+                    }
+                }
+                else
+                {
+                    toExportAssetDict.TryAdd(asset, exportPath);
+                }
+            });
+            
+            foreach (var toExportAsset in toExportAssetDict)
+            {
+                var asset = toExportAsset.Key;
+                var exportPath = toExportAsset.Value;
+                var isExported = false;
                 try
                 {
                     switch (CLIOptions.o_workMode.Value)
                     {
                         case WorkMode.ExportRaw:
                             Logger.Debug($"{CLIOptions.o_workMode}: {asset.Type} : {asset.Container} : {asset.Text}");
-                            if (ExportRawFile(asset, exportPath))
-                            {
-                                exportedCount++;
-                            }
+                            isExported = ExportRawFile(asset, exportPath);
                             break;
                         case WorkMode.Dump:
                             Logger.Debug($"{CLIOptions.o_workMode}: {asset.Type} : {asset.Container} : {asset.Text}");
-                            if (ExportDumpFile(asset, exportPath))
-                            {
-                                exportedCount++;
-                            }
+                            isExported = ExportDumpFile(asset, exportPath);
                             break;
                         case WorkMode.Export:
                             Logger.Debug($"{CLIOptions.o_workMode}: {asset.Type} : {asset.Container} : {asset.Text}");
-                            if (ExportConvertFile(asset, exportPath))
-                            {
-                                exportedCount++;
-                            }
+                            isExported = ExportConvertFile(asset, exportPath);
                             break;
                     }
                 }
@@ -458,8 +550,33 @@ namespace AssetStudioCLI
                 {
                     Logger.Error($"{asset.SourceFile.originalPath}: [{$"{asset.Type}: {asset.Text}".Color(Ansi.BrightRed)}] : Export error\n{ex}");
                 }
+
+                if (isExported)
+                {
+                    exportedCount++;
+                }
                 Console.Write($"Exported [{exportedCount}/{toExportCount}]\r");
             }
+
+            Parallel.ForEach(toParallelExportAssetDict, new ParallelOptions { MaxDegreeOfParallelism = parallelExportCount }, toExportAsset =>
+            {
+                var asset = toExportAsset.Key;
+                var exportPath = toExportAsset.Value;
+                try
+                {
+                    if (ParallelExporter.ParallelExportConvertFile(asset, exportPath, out var debugLog))
+                    {
+                        Interlocked.Increment(ref exportedCount);
+                        Logger.Debug(debugLog);
+                        Console.Write($"Exported [{exportedCount}/{toExportCount}]\r");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error($"{asset.SourceFile.originalPath}: [{$"{asset.Type}: {asset.Text}".Color(Ansi.BrightRed)}] : Export error\n{ex}");
+                }
+            });
+            ParallelExporter.ClearHash();
             Console.WriteLine("");
 
             if (exportedCount == 0)
@@ -500,6 +617,7 @@ namespace AssetStudioCLI
                                     new XElement("Type", new XAttribute("id", (int)asset.Type), asset.TypeString),
                                     new XElement("PathID", asset.m_PathID),
                                     new XElement("Source", asset.SourceFile.fullName),
+                                    new XElement("TreeNode", asset.Node != null ? asset.Node.FullPath : ""),
                                     new XElement("Size", asset.FullSize)
                                 )
                             )
@@ -531,7 +649,7 @@ namespace AssetStudioCLI
                 {
                     if (isFiltered)
                     {
-                        if (!searchList.Any(searchText => j.gameObject.m_Name.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0))
+                        if (!searchList.Any(searchText => j.Text.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0))
                             continue;
                     }
                     var gameObjects = new List<GameObject>();
@@ -610,70 +728,90 @@ namespace AssetStudioCLI
         public static void ExportLive2D()
         {
             var baseDestPath = Path.Combine(CLIOptions.o_outputFolder.Value, "Live2DOutput");
-            var useFullContainerPath = false;
+            var useFullContainerPath = true;
+            var mocPathList = new List<string>();
+            var basePathSet = new HashSet<string>();
+            var motionMode = CLIOptions.o_l2dMotionMode.Value;
+            var forceBezier = CLIOptions.f_l2dForceBezier.Value;
 
-            Progress.Reset();
-            Logger.Info($"Searching for Live2D files...");
-
-            var cubismMocs = parsedAssetsList.Where(x =>
-            {
-                if (x.Type == ClassIDType.MonoBehaviour)
-                {
-                    ((MonoBehaviour)x.Asset).m_Script.TryGet(out var m_Script);
-                    return m_Script?.m_ClassName == "CubismMoc";
-                }
-                return false;
-            }).Select(x => x.Asset).ToArray();
-            if (cubismMocs.Length == 0)
+            if (cubismMocList.Count == 0)
             {
                 Logger.Default.Log(LoggerEvent.Info, "Live2D Cubism models were not found.", ignoreLevel: true);
                 return;
             }
-            if (cubismMocs.Length > 1)
-            {
-                var basePathSet = cubismMocs.Select(x => containers[x].Substring(0, containers[x].LastIndexOf("/"))).ToHashSet();
 
-                if (basePathSet.Count != cubismMocs.Length)
-                {
-                    useFullContainerPath = true;
-                    Logger.Debug($"useFullContainerPath: {useFullContainerPath}");
-                }
+            Progress.Reset();
+            Logger.Info($"Searching for Live2D files...");
+
+            foreach (var mocMonoBehaviour in cubismMocList)
+            {
+                if (!containers.TryGetValue(mocMonoBehaviour, out var fullContainerPath))
+                    continue;
+
+                var pathSepIndex = fullContainerPath.LastIndexOf('/');
+                var basePath = pathSepIndex > 0
+                    ? fullContainerPath.Substring(0, pathSepIndex)
+                    : fullContainerPath;
+                basePathSet.Add(basePath);
+                mocPathList.Add(fullContainerPath);
             }
-            var basePathList = useFullContainerPath ?
-                cubismMocs.Select(x => containers[x]).ToList() :
-                cubismMocs.Select(x => containers[x].Substring(0, containers[x].LastIndexOf("/"))).ToList();
-            var lookup = containers.ToLookup(
-                x => basePathList.Find(b => x.Value.Contains(b) && x.Value.Split('/').Any(y => y == b.Substring(b.LastIndexOf("/") + 1))),
+
+            if (mocPathList.Count == 0)
+            {
+                Logger.Error("Live2D Cubism export error: Cannot find any model related files.");
+                return;
+            }
+            if (basePathSet.Count == mocPathList.Count)
+            {
+                mocPathList = basePathSet.ToList();
+                useFullContainerPath = false;
+                Logger.Debug($"useFullContainerPath: {useFullContainerPath}");
+            }
+            basePathSet.Clear();
+
+            var lookup = containers.AsParallel().ToLookup(
+                x => mocPathList.Find(b => x.Value.Contains(b) && x.Value.Split('/').Any(y => y == b.Substring(b.LastIndexOf("/") + 1))),
                 x => x.Key
             );
 
+            if (cubismMocList[0].serializedType?.m_Type == null && CLIOptions.o_assemblyPath.Value == "")
+            {
+                Logger.Warning("Specifying the assembly folder may be needed for proper extraction");
+            }
+
             var totalModelCount = lookup.LongCount(x => x.Key != null);
             Logger.Info($"Found {totalModelCount} model(s).");
-            var name = "";
+            var parallelTaskCount = CLIOptions.o_maxParallelExportTasks.Value;
             var modelCounter = 0;
             foreach (var assets in lookup)
             {
-                var container = assets.Key;
-                if (container == null)
+                var srcContainer = assets.Key;
+                if (srcContainer == null)
                     continue;
-                name = container;
+                var container = srcContainer;
 
-                Logger.Info($"[{modelCounter + 1}/{totalModelCount}] Exporting Live2D: \"{container.Color(Ansi.BrightCyan)}\"");
+                Logger.Info($"[{modelCounter + 1}/{totalModelCount}] Exporting Live2D: \"{srcContainer.Color(Ansi.BrightCyan)}\"");
                 try
                 {
-                    var modelName = useFullContainerPath ? Path.GetFileNameWithoutExtension(container) : container.Substring(container.LastIndexOf('/') + 1);
-                    container = Path.HasExtension(container) ? container.Replace(Path.GetExtension(container), "") : container;
+                    var modelName = useFullContainerPath
+                        ? Path.GetFileNameWithoutExtension(container)
+                        : container.Substring(container.LastIndexOf('/') + 1);
+                    container = Path.HasExtension(container)
+                        ? container.Replace(Path.GetExtension(container), "")
+                        : container;
                     var destPath = Path.Combine(baseDestPath, container) + Path.DirectorySeparatorChar;
 
-                    ExtractLive2D(assets, destPath, modelName, assemblyLoader);
+                    var modelExtractor = new Live2DExtractor(assets);
+                    modelExtractor.ExtractCubismModel(destPath, modelName, motionMode, assemblyLoader, forceBezier, parallelTaskCount);
                     modelCounter++;
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error($"Live2D model export error: \"{name}\"", ex);
+                    Logger.Error($"Live2D model export error: \"{srcContainer}\"", ex);
                 }
                 Progress.Report(modelCounter, (int)totalModelCount);
             }
+
             var status = modelCounter > 0 ?
                 $"Finished exporting [{modelCounter}/{totalModelCount}] Live2D model(s) to \"{CLIOptions.o_outputFolder.Value.Color(Ansi.BrightCyan)}\"" :
                 "Nothing exported.";

@@ -48,7 +48,7 @@ namespace AssetStudioCLI
                         case WorkMode.Info:
                             Studio.ShowExportableAssetsInfo();
                             break;
-                        case WorkMode.ExportLive2D:
+                        case WorkMode.Live2D:
                             Studio.ExportLive2D();
                             break;
                         case WorkMode.SplitObjects:

@@ -16,7 +16,7 @@ namespace AssetStudio
 
         private ImageFormat imageFormat;
         private Avatar avatar;
-        private HashSet<AnimationClip> animationClipHashSet = new HashSet<AnimationClip>();
+        private AnimationClip[] animationClipUniqArray = Array.Empty<AnimationClip>(); //TODO: a proper AnimationClip equality comparer
         private Dictionary<AnimationClip, string> boundAnimationPathDic = new Dictionary<AnimationClip, string>();
         private Dictionary<uint, string> bonePathHash = new Dictionary<uint, string>();
         private Dictionary<Texture2D, string> textureNameDictionary = new Dictionary<Texture2D, string>();
@@ -40,10 +40,7 @@ namespace AssetStudio
             }
             if (animationList != null)
             {
-                foreach (var animationClip in animationList)
-                {
-                    animationClipHashSet.Add(animationClip);
-                }
+                animationClipUniqArray = animationList.Distinct().ToArray();
             }
             ConvertAnimations();
         }
@@ -70,10 +67,7 @@ namespace AssetStudio
             }
             if (animationList != null)
             {
-                foreach (var animationClip in animationList)
-                {
-                    animationClipHashSet.Add(animationClip);
-                }
+                animationClipUniqArray = animationList.Distinct().ToArray();
             }
             ConvertAnimations();
         }
@@ -88,10 +82,7 @@ namespace AssetStudio
             }
             else
             {
-                foreach (var animationClip in animationList)
-                {
-                    animationClipHashSet.Add(animationClip);
-                }
+                animationClipUniqArray = animationList.Distinct().ToArray();
             }
             ConvertAnimations();
         }
@@ -160,6 +151,7 @@ namespace AssetStudio
 
             if (m_GameObject.m_Animation != null)
             {
+                var animationList = new List<AnimationClip>();
                 foreach (var animation in m_GameObject.m_Animation.m_Animations)
                 {
                     if (animation.TryGet(out var animationClip))
@@ -168,9 +160,10 @@ namespace AssetStudio
                         {
                             boundAnimationPathDic.Add(animationClip, GetTransformPath(m_Transform));
                         }
-                        animationClipHashSet.Add(animationClip);
+                        animationList.Add(animationClip);
                     }
                 }
+                animationClipUniqArray = animationList.Distinct().ToArray();
             }
 
             foreach (var pptr in m_Transform.m_Children)
@@ -184,6 +177,7 @@ namespace AssetStudio
         {
             if (m_Animator.m_Controller.TryGet(out var m_Controller))
             {
+                var animationList = new List<AnimationClip>();
                 switch (m_Controller)
                 {
                     case AnimatorOverrideController m_AnimatorOverrideController:
@@ -194,7 +188,7 @@ namespace AssetStudio
                                 {
                                     if (pptr.TryGet(out var m_AnimationClip))
                                     {
-                                        animationClipHashSet.Add(m_AnimationClip);
+                                        animationList.Add(m_AnimationClip);
                                     }
                                 }
                             }
@@ -207,12 +201,13 @@ namespace AssetStudio
                             {
                                 if (pptr.TryGet(out var m_AnimationClip))
                                 {
-                                    animationClipHashSet.Add(m_AnimationClip);
+                                    animationList.Add(m_AnimationClip);
                                 }
                             }
                             break;
                         }
                 }
+                animationClipUniqArray = animationList.Distinct().ToArray();
             }
         }
 
@@ -371,6 +366,7 @@ namespace AssetStudio
                 {
                     if (iMesh.hasUV[uv])
                     {
+                        c = 4;
                         var m_UV = mesh.GetUV(uv);
                         if (m_UV.Length == mesh.m_VertexCount * 2)
                         {
@@ -769,7 +765,7 @@ namespace AssetStudio
 
         private void ConvertAnimations()
         {
-            foreach (var animationClip in animationClipHashSet)
+            foreach (var animationClip in animationClipUniqArray)
             {
                 var iAnim = new ImportedKeyframedAnimation();
                 var name = animationClip.m_Name;
@@ -877,7 +873,7 @@ namespace AssetStudio
                 }
                 else
                 {
-                    var m_Clip = animationClip.m_MuscleClip.m_Clip;
+                    var m_Clip = animationClip.m_MuscleClip.m_Clip.data;
                     var streamedFrames = m_Clip.m_StreamedClip.ReadData();
                     var m_ClipBindingConstant = animationClip.m_ClipBindingConstant ?? m_Clip.ConvertValueArrayToGenericBinding();
                     for (int frameIndex = 1; frameIndex < streamedFrames.Count - 1; frameIndex++)
@@ -1016,18 +1012,16 @@ namespace AssetStudio
         private void CreateBonePathHash(Transform m_Transform)
         {
             var name = GetTransformPathByFather(m_Transform);
-            var crc = new SevenZip.CRC();
             var bytes = Encoding.UTF8.GetBytes(name);
-            crc.Update(bytes, 0, (uint)bytes.Length);
-            bonePathHash[crc.GetDigest()] = name;
+            var crc = SevenZip.CRC.CalculateDigest(bytes, 0, (uint)bytes.Length);
+            bonePathHash[crc] = name;
             int index;
             while ((index = name.IndexOf("/", StringComparison.Ordinal)) >= 0)
             {
                 name = name.Substring(index + 1);
-                crc = new SevenZip.CRC();
                 bytes = Encoding.UTF8.GetBytes(name);
-                crc.Update(bytes, 0, (uint)bytes.Length);
-                bonePathHash[crc.GetDigest()] = name;
+                crc = SevenZip.CRC.CalculateDigest(bytes, 0, (uint)bytes.Length);
+                bonePathHash[crc] = name;
             }
             foreach (var pptr in m_Transform.m_Children)
             {
@@ -1102,10 +1096,7 @@ namespace AssetStudio
             {
                 return name;
             }
-            else
-            {
-                return null;
-            }
+            return null;
         }
     }
 }

@@ -11,7 +11,7 @@ namespace AssetStudio
 
         public Font(ObjectReader reader) : base(reader)
         {
-            if ((version[0] == 5 && version[1] >= 5) || version[0] > 5)//5.5 and up
+            if (version >= (5, 5))//5.5 and up
             {
                 var m_LineSpacing = reader.ReadSingle();
                 var m_DefaultMaterial = new PPtr<Material>(reader);
@@ -43,7 +43,7 @@ namespace AssetStudio
             {
                 int m_AsciiStartOffset = reader.ReadInt32();
 
-                if (version[0] <= 3)
+                if (version <= 3)
                 {
                     int m_FontCountX = reader.ReadInt32();
                     int m_FontCountY = reader.ReadInt32();
@@ -52,7 +52,7 @@ namespace AssetStudio
                 float m_Kerning = reader.ReadSingle();
                 float m_LineSpacing = reader.ReadSingle();
 
-                if (version[0] <= 3)
+                if (version <= 3)
                 {
                     int m_PerCharacterKerning_size = reader.ReadInt32();
                     for (int i = 0; i < m_PerCharacterKerning_size; i++)
@@ -86,7 +86,7 @@ namespace AssetStudio
                     float vertheight = reader.ReadSingle();
                     float width = reader.ReadSingle();
 
-                    if (version[0] >= 4)
+                    if (version >= 4)
                     {
                         var flipped = reader.ReadBoolean();
                         reader.AlignStream();
@@ -103,7 +103,7 @@ namespace AssetStudio
                     float second = reader.ReadSingle();
                 }
 
-                if (version[0] <= 3)
+                if (version <= 3)
                 {
                     var m_GridFont = reader.ReadBoolean();
                     reader.AlignStream();

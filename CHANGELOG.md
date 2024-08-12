@@ -1,5 +1,63 @@
 # Changelog
 
+## v0.18.0.0 [04-04-2024]
+#### Breaking Changes
+- Structure of the AnimationClip class has been changed a bit to match the structure of its type tree (`m_Clip = animationClip.m_MuscleClip.m_Clip` -> `m_Clip = animationClip.m_MuscleClip.m_Clip.data`)
+- Types of Unity version fields have been changed from `int[]` to the `UnityVersion` class
+
+#### New features
+- Added option to export assets with PathID in filename (https://github.com/aelurum/AssetStudio/issues/25)
+- Added support for swizzled Switch textures:
+	- Ported from nesrak1's fork (https://github.com/nesrak1/AssetStudio/tree/switch-tex-deswizzle)
+- Added support for `Texture2DArray` assets:
+	- [GUI] Assets of fake asset type `Texture2DArrayImage` will be generated, to make it easier to work with images from array in the GUI
+- Added support for assets with Zstd block compression:
+	- Implemented as one of the option for custom compression type (5). Selected by default.
+	- [GUI] "Options" -> "Custom compression type"
+	- [CLI] "--custom-compression"
+- Added support of Texture2D assets from Unity 2023.2+
+- Added support of parallel asset export
+	- It's also possible to specify the number of parallel tasks for export in both the GUI and CLI (the higher the number of parallel tasks, the more RAM may be needed for exporting)
+- Added support for parsing assets using their type tree for some asset types (`Texture2D`, `Texture2DArray`, `AnimationClip`) (beta):
+  > only suitable for asset bundles which contain typetree info
+
+#### Fixes
+- [GUI] Fixed compatibility with High Contrast modes
+- Fixed Live2D export error due to wrong Blend type in Live2D expression parser
+- Fixed AssetBundle structure for Unity v5.4.x (https://github.com/aelurum/AssetStudio/issues/31)
+- Fixed loading of some Unity 2019.4 assets
+
+#### Other changes
+- [GUI] Preserve selection order of `AnimationClip` assets (https://github.com/aelurum/AssetStudio/issues/24)
+- Improved integration with Live2D assets:
+	- Improved export method of AnimationClip motions
+	- Added support for generation of cdi3.json (beta)
+	- [GUI] Added display of model info on the preview tab
+	- [GUI] Added support for partial export:
+		- selected models
+		- model + selected AnimationClip motions
+		- model + selected Fade motions
+		- model + selected Fade Motion List
+- Add more options to work with Scene Hierarchy: (https://github.com/aelurum/AssetStudio/issues/23)
+	- Added option to group exported assets by node path in scene hierarchy
+	- Added field with node path to exported xml asset list
+- [CLI] Added colors to help message
+- Changed Dump function to show/export object dump if type tree dump is not available
+- Added more displayed information for non-fmod audio clips
+- Added display of asset bundle's unity version in cases where asset's unity version is stripped but the asset bundle's unity version is not
+
+## v0.17.4.0 [16-12-2023]
+- Added support for Live2D Fade motions
+	- [GUI] Added related settings to the Export Options window
+	- [CLI] Added options section with related settings
+- Added support for separate PreloadData (https://github.com/Perfare/AssetStudio/issues/690)
+- [GUI] Added support for .lnk files via Drag&Drop (https://github.com/aelurum/AssetStudio/issues/13)
+- [GUI] Added support for Drag&Drop files from a browser
+- [GUI] Added console logger
+	- Added option to save log to a file
+- [GUI] Added option to not build a tree structure
+- Made some other minor fixes and improvements
+
 ## v0.17.3.0 [13-09-2023]
 - [CLI] Added support for exporting split objects (fbx) (https://github.com/aelurum/AssetStudio/pull/10)
 - [CLI] Fixed display of asset names in the exported asset list in some working modes
