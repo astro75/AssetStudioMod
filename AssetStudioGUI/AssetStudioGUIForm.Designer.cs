@@ -159,6 +159,7 @@
             this.goToSceneHierarchyToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.showOriginalFileToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.columnHeaderCompressedSize = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeaderFormat = new System.Windows.Forms.ColumnHeader();
             this.menuStrip1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer1)).BeginInit();
             this.splitContainer1.Panel1.SuspendLayout();
@@ -794,13 +795,7 @@
             // 
             // assetListView
             // 
-            this.assetListView.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {
-            this.columnHeaderName,
-            this.columnHeaderContainer,
-            this.columnHeaderType,
-            this.columnHeaderPathID,
-            this.columnHeaderSize,
-            this.columnHeaderCompressedSize});
+            this.assetListView.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] { this.columnHeaderName, this.columnHeaderContainer, this.columnHeaderType, this.columnHeaderPathID, this.columnHeaderSize, this.columnHeaderCompressedSize, this.columnHeaderFormat });
             this.assetListView.Dock = System.Windows.Forms.DockStyle.Fill;
             this.assetListView.FullRowSelect = true;
             this.assetListView.GridLines = true;
@@ -1427,6 +1422,7 @@
             // columnHeaderCompressedSize
             // 
             this.columnHeaderCompressedSize.Text = "Compressed Size Estimate";
+            this.columnHeaderFormat.Text = "Format";
             // 
             // AssetStudioGUIForm
             // 
@@ -1478,6 +1474,8 @@
             this.PerformLayout();
 
         }
+
+        private System.Windows.Forms.ColumnHeader columnHeaderFormat;
 
         #endregion
 

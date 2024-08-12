@@ -12,6 +12,7 @@ namespace AssetStudioGUI
         public long m_PathID;
         public long FullSize;
         public long CompressedSizeEstimate;
+        public TextureFormat? TextureFormat;
         public ClassIDType Type;
         public string InfoText;
         public string UniqueID;
@@ -26,6 +27,7 @@ namespace AssetStudioGUI
             m_PathID = asset.m_PathID;
             FullSize = asset.byteSize;
             CompressedSizeEstimate = asset.compressedSizeEstimate;
+            TextureFormat = asset is Texture2D texture2D ? texture2D.m_TextureFormat : (TextureFormat?)null;
         }
 
         public void SetSubItems()
@@ -37,6 +39,7 @@ namespace AssetStudioGUI
                 m_PathID.ToString(), //PathID
                 FullSize.ToString(), //Size
                 CompressedSizeEstimate.ToString(), //Compressed Size Estimate
+                TextureFormat.ToString(), //Format
             });
         }
     }
